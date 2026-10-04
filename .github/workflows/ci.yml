@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+
+  clippy:
+    name: Clippy (-D warnings)
+    runs-on: ubuntu-latest
+    needs: fmt
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      # Default features: the safe, portable pipeline.
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  test:
+    name: Test (default features)
+    runs-on: ubuntu-latest
+    needs: clippy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      # No privileges / no libpcap / no network needed: pcap replay drives the suite.
+      - run: cargo test --workspace
+
+  live-build:
+    name: Build + test (live-capture, geoip)
+    runs-on: ubuntu-latest
+    needs: clippy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      # Compile the unsafe AF_PACKET module + optional GeoIP — the code paths the
+      # default-feature jobs do not build. This is the primary gate for those.
+      - run: cargo test --workspace --features live-capture,geoip
+      - run: cargo build --release --features live-capture,geoip
+
+  portability:
+    name: Check (${{ matrix.os }})
+    # Proves the default (safe) build is cross-platform; afpacket is cfg-gated.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    needs: fmt
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --workspace --all-targets
+
+  bench-compile:
+    name: Bench compiles
+    runs-on: ubuntu-latest
+    needs: clippy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo bench --no-run
+
+  fuzz-targets:
+    name: Fuzz targets build (advisory)
+    runs-on: ubuntu-latest
+    needs: clippy
+    # Non-blocking: cargo-fuzz needs nightly + its own setup; don't gate the PR on it.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install nightly --profile minimal
+      - name: Type-check fuzz targets
+        working-directory: fuzz
+        run: cargo +nightly check --all-targets
+
+  audit:
+    name: Security audit (advisory)
+    runs-on: ubuntu-latest
+    # Non-blocking: transitive advisories should not turn CI red on its own.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo install cargo-audit --locked
+      - run: cargo audit
