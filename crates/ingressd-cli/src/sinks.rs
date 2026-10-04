@@ -36,7 +36,13 @@ impl RotatingFile {
     pub fn new(path: PathBuf, max_bytes: u64, max_files: usize) -> std::io::Result<RotatingFile> {
         let file = OpenOptions::new().create(true).append(true).open(&path)?;
         let written = file.metadata().map(|m| m.len()).unwrap_or(0);
-        Ok(RotatingFile { path, max_bytes, max_files, file: Some(file), written })
+        Ok(RotatingFile {
+            path,
+            max_bytes,
+            max_files,
+            file: Some(file),
+            written,
+        })
     }
 
     /// Write one line (a newline is appended), rotating when over the byte cap.
@@ -81,7 +87,11 @@ impl RotatingFile {
         if base.exists() {
             std::fs::rename(&base, &to)?;
         }
-        let f = OpenOptions::new().create(true).truncate(true).write(true).open(&base)?;
+        let f = OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(&base)?;
         self.file = Some(f);
         self.written = 0;
         Ok(())
@@ -104,16 +114,15 @@ impl Sink {
     /// Build from sink config. Returns the sink and, if a webhook is configured,
     /// the receiver to drive [`run_webhook`].
     pub fn new(cfg: &SinksCfg, counters: Arc<Counters>) -> (Sink, Option<WebhookRx>) {
-        let file = cfg
-            .alerts_file
-            .as_ref()
-            .and_then(|p| match RotatingFile::new(p.clone(), cfg.rotate_max_bytes, cfg.rotate_max_files) {
+        let file = cfg.alerts_file.as_ref().and_then(|p| {
+            match RotatingFile::new(p.clone(), cfg.rotate_max_bytes, cfg.rotate_max_files) {
                 Ok(r) => Some(r),
                 Err(e) => {
                     tracing::error!("cannot open alerts file {}: {e}", p.display());
                     None
                 }
-            });
+            }
+        });
 
         #[cfg(unix)]
         let syslog = if cfg.syslog {
@@ -240,7 +249,10 @@ pub fn to_ecs(alert: &Alert) -> String {
     event.insert("module".into(), Value::String("ingressd".into()));
     event.insert("severity".into(), Value::from(sev_number(alert.severity)));
     event.insert("code".into(), Value::String(alert.rule.to_string()));
-    event.insert("action".into(), Value::String(alert.rule.as_str().to_string()));
+    event.insert(
+        "action".into(),
+        Value::String(alert.rule.as_str().to_string()),
+    );
     event.insert("risk_score".into(), Value::from(alert.risk_score));
     root.insert("event".into(), Value::Object(event));
 
@@ -260,24 +272,51 @@ pub fn to_ecs(alert: &Alert) -> String {
 
     let mut network = Map::new();
     network.insert("transport".into(), Value::String(alert.proto.to_string()));
-    network.insert("direction".into(), Value::String(alert.direction.to_string()));
+    network.insert(
+        "direction".into(),
+        Value::String(alert.direction.to_string()),
+    );
     root.insert("network".into(), Value::Object(network));
 
     let mut rule = Map::new();
-    rule.insert("name".into(), Value::String(alert.rule.as_str().to_string()));
-    rule.insert("reference".into(), Value::String(format!("https://attack.mitre.org/techniques/{}", alert.mitre)));
+    rule.insert(
+        "name".into(),
+        Value::String(alert.rule.as_str().to_string()),
+    );
+    rule.insert(
+        "reference".into(),
+        Value::String(format!(
+            "https://attack.mitre.org/techniques/{}",
+            alert.mitre
+        )),
+    );
     root.insert("rule".into(), Value::Object(rule));
 
     let mut mitre = Map::new();
     mitre.insert("technique_id".into(), Value::String(alert.mitre.clone()));
     mitre.insert("tactic_id".into(), Value::String(alert.tactic.clone()));
-    mitre.insert("tactic_name".into(), Value::String(alert.tactic_name.clone()));
+    mitre.insert(
+        "tactic_name".into(),
+        Value::String(alert.tactic_name.clone()),
+    );
     root.insert("mitre".into(), Value::Object(mitre));
 
-    root.insert("tags".into(), Value::Array(alert.tags.iter().map(|t| Value::String(t.clone())).collect()));
+    root.insert(
+        "tags".into(),
+        Value::Array(
+            alert
+                .tags
+                .iter()
+                .map(|t| Value::String(t.clone()))
+                .collect(),
+        ),
+    );
 
     let mut labels = Map::new();
-    labels.insert("mitre_technique_id".into(), Value::String(alert.mitre.clone()));
+    labels.insert(
+        "mitre_technique_id".into(),
+        Value::String(alert.mitre.clone()),
+    );
     if let Some(cc) = &alert.peer_country {
         labels.insert("peer_country".into(), Value::String(cc.clone()));
     }
@@ -287,23 +326,34 @@ pub fn to_ecs(alert: &Alert) -> String {
     root.insert("labels".into(), Value::Object(labels));
 
     root.insert("message".into(), Value::String(alert.detail.clone()));
-    root.insert("ingressd".into(), Value::Object({
-        let mut m = Map::new();
-        m.insert("count".into(), Value::from(alert.count));
-        m.insert("window_s".into(), Value::from(alert.window_s));
-        m
-    }));
+    root.insert(
+        "ingressd".into(),
+        Value::Object({
+            let mut m = Map::new();
+            m.insert("count".into(), Value::from(alert.count));
+            m.insert("window_s".into(), Value::from(alert.window_s));
+            m
+        }),
+    );
 
     Value::Object(root).to_string()
 }
 
 /// POST queued payloads to the webhook with bounded exponential backoff.
-pub async fn run_webhook(mut rx: WebhookRx, url: String, token: Option<String>, client: reqwest::Client) {
+pub async fn run_webhook(
+    mut rx: WebhookRx,
+    url: String,
+    token: Option<String>,
+    client: reqwest::Client,
+) {
     while let Some(payload) = rx.recv().await {
         let mut attempt = 0u32;
         let mut backoff = Duration::from_millis(500);
         loop {
-            let mut req = client.post(&url).header("content-type", "application/json").body(payload.clone());
+            let mut req = client
+                .post(&url)
+                .header("content-type", "application/json")
+                .body(payload.clone());
             if let Some(t) = &token {
                 req = req.bearer_auth(t);
             }

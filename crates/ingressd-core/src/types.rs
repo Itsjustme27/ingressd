@@ -110,7 +110,14 @@ impl TcpFlags {
 
     /// True when no control flags are set (a NULL scan packet).
     pub fn is_null(&self) -> bool {
-        !(self.fin || self.syn || self.rst || self.psh || self.ack || self.urg || self.ece || self.cwr)
+        !(self.fin
+            || self.syn
+            || self.rst
+            || self.psh
+            || self.ack
+            || self.urg
+            || self.ece
+            || self.cwr)
     }
 
     /// SYN with no ACK: a connection attempt (used by most scan/flood rules).
@@ -140,7 +147,11 @@ impl TcpFlags {
 
     /// True if this packet uses any of the well-known invalid flag combinations.
     pub fn is_invalid_combo(&self) -> bool {
-        self.is_null() || self.is_xmas() || self.is_fin_only() || self.is_syn_fin() || self.is_syn_rst()
+        self.is_null()
+            || self.is_xmas()
+            || self.is_fin_only()
+            || self.is_syn_fin()
+            || self.is_syn_rst()
     }
 }
 
@@ -384,12 +395,19 @@ impl RuleId {
     /// MITRE ATT&CK tactic id for the rule's technique.
     pub fn tactic(&self) -> &'static str {
         match self {
-            RuleId::PortScan | RuleId::InvalidTcpFlags => "TA0007",        // Discovery
-            RuleId::BruteForce => "TA0006",                                 // Credential Access
-            RuleId::SynFlood | RuleId::UdpFlood | RuleId::IcmpFlood | RuleId::ReflectionAmplification => "TA0040", // Impact
-            RuleId::DnsTunnel | RuleId::Beaconing | RuleId::ThreatIntelHit | RuleId::SuspiciousPort | RuleId::IcmpTunnel => "TA0011", // Command and Control
-            RuleId::NewListenerProbe => "TA0043",                           // Reconnaissance
-            RuleId::CustomSignature => "TA0011",                            // Command and Control (default)
+            RuleId::PortScan | RuleId::InvalidTcpFlags => "TA0007", // Discovery
+            RuleId::BruteForce => "TA0006",                         // Credential Access
+            RuleId::SynFlood
+            | RuleId::UdpFlood
+            | RuleId::IcmpFlood
+            | RuleId::ReflectionAmplification => "TA0040", // Impact
+            RuleId::DnsTunnel
+            | RuleId::Beaconing
+            | RuleId::ThreatIntelHit
+            | RuleId::SuspiciousPort
+            | RuleId::IcmpTunnel => "TA0011", // Command and Control
+            RuleId::NewListenerProbe => "TA0043",                   // Reconnaissance
+            RuleId::CustomSignature => "TA0011",                    // Command and Control (default)
         }
     }
 
@@ -552,7 +570,14 @@ pub struct AlertDraft {
 
 impl AlertDraft {
     /// Convenience constructor filling common fields from an event.
-    pub fn from_event(ev: &PacketEvent, severity: Severity, detail: String, count: u64, window_s: u64, rule: RuleId) -> AlertDraft {
+    pub fn from_event(
+        ev: &PacketEvent,
+        severity: Severity,
+        detail: String,
+        count: u64,
+        window_s: u64,
+        rule: RuleId,
+    ) -> AlertDraft {
         AlertDraft {
             rule,
             severity,
@@ -560,7 +585,10 @@ impl AlertDraft {
             peer_ip: ev.peer_ip,
             local_ip: ev.local_ip,
             proto: ev.proto,
-            ports: AlertPorts { src: ev.src_port, dst: ev.dst_port },
+            ports: AlertPorts {
+                src: ev.src_port,
+                dst: ev.dst_port,
+            },
             detail,
             count,
             window_s,

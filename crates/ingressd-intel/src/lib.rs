@@ -47,11 +47,17 @@ pub struct FeedSpec {
 impl FeedSpec {
     /// An HTTPS feed.
     pub fn url(name: impl Into<String>, url: impl Into<String>) -> Self {
-        FeedSpec { name: name.into(), location: FeedLocation::Url(url.into()) }
+        FeedSpec {
+            name: name.into(),
+            location: FeedLocation::Url(url.into()),
+        }
     }
     /// A local blocklist file.
     pub fn file(name: impl Into<String>, path: impl Into<PathBuf>) -> Self {
-        FeedSpec { name: name.into(), location: FeedLocation::File(path.into()) }
+        FeedSpec {
+            name: name.into(),
+            location: FeedLocation::File(path.into()),
+        }
     }
 }
 
@@ -70,7 +76,13 @@ fn cache_path(dir: &Path, spec: &FeedSpec) -> PathBuf {
     let safe: String = spec
         .name
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     dir.join(format!("{safe}.cache"))
 }
@@ -127,7 +139,12 @@ impl Intel {
     /// Seconds since the last successful refresh (for the feed-age metric).
     pub fn age_seconds(&self) -> Option<u64> {
         let g = self.last_update.lock().unwrap_or_else(|p| p.into_inner());
-        g.map(|t| SystemTime::now().duration_since(t).map(|d| d.as_secs()).unwrap_or(0))
+        g.map(|t| {
+            SystemTime::now()
+                .duration_since(t)
+                .map(|d| d.as_secs())
+                .unwrap_or(0)
+        })
     }
 
     /// Synchronously load file feeds and any cached URL feeds (no network).
@@ -168,7 +185,11 @@ impl Intel {
             self.swap(t);
             self.mark_updated();
         }
-        RefreshReport { entries, feeds_ok: ok, failed }
+        RefreshReport {
+            entries,
+            feeds_ok: ok,
+            failed,
+        }
     }
 
     /// Fetch all feeds and swap in the result, preserving last-good on failure.
@@ -222,7 +243,11 @@ impl Intel {
             self.swap(t);
             self.mark_updated();
         }
-        RefreshReport { entries, feeds_ok: ok, failed }
+        RefreshReport {
+            entries,
+            feeds_ok: ok,
+            failed,
+        }
     }
 }
 

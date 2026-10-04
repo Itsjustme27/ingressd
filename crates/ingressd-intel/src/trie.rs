@@ -50,10 +50,22 @@ impl TrieIntel {
     pub fn insert(&mut self, net: IpNet, source: impl Into<Option<String>>) {
         let src = source.into();
         let (bytes, prefix_len, total_bits) = match net {
-            IpNet::V4(v4) => (v4.network().octets().to_vec(), v4.prefix_len() as usize, 32usize),
-            IpNet::V6(v6) => (v6.network().octets().to_vec(), v6.prefix_len() as usize, 128usize),
+            IpNet::V4(v4) => (
+                v4.network().octets().to_vec(),
+                v4.prefix_len() as usize,
+                32usize,
+            ),
+            IpNet::V6(v6) => (
+                v6.network().octets().to_vec(),
+                v6.prefix_len() as usize,
+                128usize,
+            ),
         };
-        let root = if total_bits == 32 { &mut self.v4 } else { &mut self.v6 };
+        let root = if total_bits == 32 {
+            &mut self.v4
+        } else {
+            &mut self.v6
+        };
         let mut cur = root;
         for i in 0..prefix_len {
             cur = cur.child(bit_at(&bytes, i));
@@ -98,7 +110,9 @@ impl TrieIntel {
                 None => break,
             }
         }
-        best.map(|source| IntelHit { source: Some(source) })
+        best.map(|source| IntelHit {
+            source: Some(source),
+        })
     }
 }
 

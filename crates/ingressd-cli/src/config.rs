@@ -184,7 +184,12 @@ impl Default for Config {
 
 impl Default for CustomSignatures {
     fn default() -> Self {
-        CustomSignatures { enabled: false, files: Vec::new(), rules: Vec::new(), vars: HashMap::new() }
+        CustomSignatures {
+            enabled: false,
+            files: Vec::new(),
+            rules: Vec::new(),
+            vars: HashMap::new(),
+        }
     }
 }
 
@@ -208,19 +213,31 @@ impl Default for General {
 
 impl Default for Intel {
     fn default() -> Self {
-        Intel { feeds: Vec::new(), refresh_secs: 3600, geoip_db: None }
+        Intel {
+            feeds: Vec::new(),
+            refresh_secs: 3600,
+            geoip_db: None,
+        }
     }
 }
 
 impl Default for Feed {
     fn default() -> Self {
-        Feed { name: String::new(), url: None, path: None, enabled: true }
+        Feed {
+            name: String::new(),
+            url: None,
+            path: None,
+            enabled: true,
+        }
     }
 }
 
 impl Default for Metrics {
     fn default() -> Self {
-        Metrics { enabled: true, listen: "127.0.0.1:9102".to_string() }
+        Metrics {
+            enabled: true,
+            listen: "127.0.0.1:9102".to_string(),
+        }
     }
 }
 
@@ -259,7 +276,9 @@ impl Default for Enforce {
 
 impl Default for Log {
     fn default() -> Self {
-        Log { level: "info".to_string() }
+        Log {
+            level: "info".to_string(),
+        }
     }
 }
 
@@ -292,7 +311,9 @@ impl Config {
     pub fn source(&self) -> Result<SourceKind, String> {
         let g = &self.general;
         match (g.pcap.is_some(), g.flow_log.is_some()) {
-            (true, true) => Err("set only one of general.pcap / general.flow_log / live capture".into()),
+            (true, true) => {
+                Err("set only one of general.pcap / general.flow_log / live capture".into())
+            }
             (true, false) => Ok(SourceKind::Pcap),
             (false, true) => Ok(SourceKind::FlowLog),
             (false, false) => Ok(SourceKind::Live),
@@ -318,16 +339,25 @@ impl Config {
         }
         // metrics listen address must parse.
         if self.metrics.listen.parse::<std::net::SocketAddr>().is_err() {
-            errs.push(format!("metrics.listen: invalid socket address '{}'", self.metrics.listen));
+            errs.push(format!(
+                "metrics.listen: invalid socket address '{}'",
+                self.metrics.listen
+            ));
         }
         // feeds need exactly one of url/path.
         for f in &self.intel.feeds {
-            let has = [f.url.is_some(), f.path.is_some()].iter().filter(|x| **x).count();
+            let has = [f.url.is_some(), f.path.is_some()]
+                .iter()
+                .filter(|x| **x)
+                .count();
             if f.name.is_empty() {
                 errs.push("intel.feed: name must not be empty".into());
             }
             if has != 1 {
-                errs.push(format!("intel.feed '{}': set exactly one of url or path", f.name));
+                errs.push(format!(
+                    "intel.feed '{}': set exactly one of url or path",
+                    f.name
+                ));
             }
             if let Some(u) = &f.url {
                 if !u.starts_with("https://") {
@@ -336,7 +366,10 @@ impl Config {
             }
         }
         if !(self.enforce.family == "ip" || self.enforce.family == "ip6") {
-            errs.push(format!("enforce.family: must be 'ip' or 'ip6', got '{}'", self.enforce.family));
+            errs.push(format!(
+                "enforce.family: must be 'ip' or 'ip6', got '{}'",
+                self.enforce.family
+            ));
         }
         if self.sinks.rotate_max_files == 0 {
             errs.push("sinks.rotate_max_files must be >= 1".into());
@@ -349,8 +382,14 @@ impl Config {
         if self.general.channel_capacity == 0 {
             errs.push("general.channel_capacity must be >= 1".into());
         }
-        if !matches!(self.general.on_queue_full.as_str(), "drop" | "stall" | "exit") {
-            errs.push(format!("general.on_queue_full must be drop|stall|exit, got '{}'", self.general.on_queue_full));
+        if !matches!(
+            self.general.on_queue_full.as_str(),
+            "drop" | "stall" | "exit"
+        ) {
+            errs.push(format!(
+                "general.on_queue_full must be drop|stall|exit, got '{}'",
+                self.general.on_queue_full
+            ));
         }
         // source must be resolvable.
         if self.source().is_err() {

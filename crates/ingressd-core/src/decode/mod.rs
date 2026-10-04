@@ -108,13 +108,19 @@ impl<'a> Reader<'a> {
         self.data.len() - self.pos
     }
     fn u8(&mut self) -> Result<u8, DecodeError> {
-        let b = *self.data.get(self.pos).ok_or(DecodeError::TooShort { needed: 1, had: 0 })?;
+        let b = *self
+            .data
+            .get(self.pos)
+            .ok_or(DecodeError::TooShort { needed: 1, had: 0 })?;
         self.pos += 1;
         Ok(b)
     }
     fn u16(&mut self) -> Result<u16, DecodeError> {
         if self.remaining() < 2 {
-            return Err(DecodeError::TooShort { needed: 2, had: self.remaining() });
+            return Err(DecodeError::TooShort {
+                needed: 2,
+                had: self.remaining(),
+            });
         }
         let v = u16::from_be_bytes([self.data[self.pos], self.data[self.pos + 1]]);
         self.pos += 2;
@@ -122,7 +128,10 @@ impl<'a> Reader<'a> {
     }
     fn u32(&mut self) -> Result<u32, DecodeError> {
         if self.remaining() < 4 {
-            return Err(DecodeError::TooShort { needed: 4, had: self.remaining() });
+            return Err(DecodeError::TooShort {
+                needed: 4,
+                had: self.remaining(),
+            });
         }
         let v = u32::from_be_bytes([
             self.data[self.pos],
@@ -135,7 +144,10 @@ impl<'a> Reader<'a> {
     }
     fn take(&mut self, n: usize) -> Result<&'a [u8], DecodeError> {
         if self.remaining() < n {
-            return Err(DecodeError::TooShort { needed: n, had: self.remaining() });
+            return Err(DecodeError::TooShort {
+                needed: n,
+                had: self.remaining(),
+            });
         }
         let s = &self.data[self.pos..self.pos + n];
         self.pos += n;
@@ -205,7 +217,10 @@ fn decode_ipv4(bytes: &[u8]) -> Result<RawPacket, DecodeError> {
     // Options occupy the rest of the header.
     let header_end = ihl;
     if bytes.len() < header_end {
-        return Err(DecodeError::TooShort { needed: header_end, had: bytes.len() });
+        return Err(DecodeError::TooShort {
+            needed: header_end,
+            had: bytes.len(),
+        });
     }
     let l4_all = &bytes[header_end..];
 
@@ -258,7 +273,10 @@ fn decode_ipv6(bytes: &[u8]) -> Result<RawPacket, DecodeError> {
             // Hop-by-hop(0), Routing(43), Destination(60/156 for some), AH(51), ESP(50), etc.
             0 | 43 | 60 | 135 | 139 | 140 | 253 | 254 => {
                 if ext.len() < 2 {
-                    return Err(DecodeError::TooShort { needed: 2, had: ext.len() });
+                    return Err(DecodeError::TooShort {
+                        needed: 2,
+                        had: ext.len(),
+                    });
                 }
                 nh = ext[0];
                 let hdr_len = (ext[1] as usize + 1) * 8;
@@ -270,7 +288,10 @@ fn decode_ipv6(bytes: &[u8]) -> Result<RawPacket, DecodeError> {
             44 => {
                 // Fragment header.
                 if ext.len() < 8 {
-                    return Err(DecodeError::TooShort { needed: 8, had: ext.len() });
+                    return Err(DecodeError::TooShort {
+                        needed: 8,
+                        had: ext.len(),
+                    });
                 }
                 nh = ext[0];
                 let off_more = u16::from_be_bytes([ext[2], ext[3]]);
@@ -319,7 +340,10 @@ fn decode_l4(protocol: u8, l4: &[u8]) -> Result<Transport, DecodeError> {
 
 fn decode_tcp(l4: &[u8]) -> Result<TcpInfo, DecodeError> {
     if l4.len() < 20 {
-        return Err(DecodeError::TooShort { needed: 20, had: l4.len() });
+        return Err(DecodeError::TooShort {
+            needed: 20,
+            had: l4.len(),
+        });
     }
     let src = u16::from_be_bytes([l4[0], l4[1]]);
     let dst = u16::from_be_bytes([l4[2], l4[3]]);
@@ -329,13 +353,26 @@ fn decode_tcp(l4: &[u8]) -> Result<TcpInfo, DecodeError> {
     }
     let flags = TcpFlags::from_bits(l4[13]);
     let payload_len = l4.len() - data_offset;
-    let payload: Vec<u8> = l4[data_offset..].iter().copied().take(MAX_PAYLOAD_SNAP).collect();
-    Ok(TcpInfo { src, dst, flags, payload_len, payload })
+    let payload: Vec<u8> = l4[data_offset..]
+        .iter()
+        .copied()
+        .take(MAX_PAYLOAD_SNAP)
+        .collect();
+    Ok(TcpInfo {
+        src,
+        dst,
+        flags,
+        payload_len,
+        payload,
+    })
 }
 
 fn decode_udp(l4: &[u8]) -> Result<UdpInfo, DecodeError> {
     if l4.len() < 8 {
-        return Err(DecodeError::TooShort { needed: 8, had: l4.len() });
+        return Err(DecodeError::TooShort {
+            needed: 8,
+            had: l4.len(),
+        });
     }
     let src = u16::from_be_bytes([l4[0], l4[1]]);
     let dst = u16::from_be_bytes([l4[2], l4[3]]);
@@ -361,9 +398,18 @@ fn decode_udp(l4: &[u8]) -> Result<UdpInfo, DecodeError> {
 fn decode_icmp(l4: &[u8], v6: bool) -> IcmpInfo {
     let kind = l4.first().copied().unwrap_or(0);
     let code = l4.get(1).copied().unwrap_or(0);
-    let echo = if v6 { kind == 128 || kind == 129 } else { kind == 8 || kind == 0 };
+    let echo = if v6 {
+        kind == 128 || kind == 129
+    } else {
+        kind == 8 || kind == 0
+    };
     let payload_len = l4.len().saturating_sub(8);
-    IcmpInfo { kind, code, echo, payload_len }
+    IcmpInfo {
+        kind,
+        code,
+        echo,
+        payload_len,
+    }
 }
 
 /// Maximum labels / pointer hops accepted before we treat DNS as malformed.
@@ -374,7 +420,10 @@ const DNS_MAX_POINTER_HOPS: usize = 32;
 /// [`DecodeError::Malformed`] on any structural problem.
 pub fn parse_dns(msg: &[u8]) -> Result<DnsQuery, DecodeError> {
     if msg.len() < 12 {
-        return Err(DecodeError::TooShort { needed: 12, had: msg.len() });
+        return Err(DecodeError::TooShort {
+            needed: 12,
+            had: msg.len(),
+        });
     }
     let flags = u16::from_be_bytes([msg[2], msg[3]]);
     let is_response = flags & 0x8000 != 0;
@@ -457,7 +506,12 @@ pub fn parse_dns(msg: &[u8]) -> Result<DnsQuery, DecodeError> {
     }
     let qtype = u16::from_be_bytes([msg[qpos], msg[qpos + 1]]);
     let qclass = u16::from_be_bytes([msg[qpos + 2], msg[qpos + 3]]);
-    Ok(DnsQuery { qname: name, qtype, qclass, is_response })
+    Ok(DnsQuery {
+        qname: name,
+        qtype,
+        qclass,
+        is_response,
+    })
 }
 
 // Helpers to convert fixed slices into arrays without panicking.
@@ -467,11 +521,15 @@ trait ToArray {
 }
 impl ToArray for [u8] {
     fn try_to_array4(&self) -> Result<[u8; 4], DecodeError> {
-        let a: [u8; 4] = self.try_into().map_err(|_| DecodeError::Malformed("ipv4 len"))?;
+        let a: [u8; 4] = self
+            .try_into()
+            .map_err(|_| DecodeError::Malformed("ipv4 len"))?;
         Ok(a)
     }
     fn try_to_array16(&self) -> Result<[u8; 16], DecodeError> {
-        let a: [u8; 16] = self.try_into().map_err(|_| DecodeError::Malformed("ipv6 len"))?;
+        let a: [u8; 16] = self
+            .try_into()
+            .map_err(|_| DecodeError::Malformed("ipv6 len"))?;
         Ok(a)
     }
 }

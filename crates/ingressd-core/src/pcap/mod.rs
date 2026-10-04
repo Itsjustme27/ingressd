@@ -79,7 +79,13 @@ impl<R: Read> PcapReader<R> {
         let _sigfigs = order.u32([hdr[12], hdr[13], hdr[14], hdr[15]]);
         let snaplen = order.u32([hdr[16], hdr[17], hdr[18], hdr[19]]);
         let linktype = order.u32([hdr[20], hdr[21], hdr[22], hdr[23]]);
-        Ok(PcapReader { inner, order, nano, linktype, snaplen })
+        Ok(PcapReader {
+            inner,
+            order,
+            nano,
+            linktype,
+            snaplen,
+        })
     }
 
     /// Linktype of the file ([`LINKTYPE_ETHERNET`] for our writers).

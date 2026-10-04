@@ -144,11 +144,20 @@ mod tests {
     #[test]
     fn allowlisted_peer_never_alerts() {
         let cfg = RulesConfig::default();
-        let mut eng = Engine::new(&cfg, Arc::new(NullIntel), None, counters(), vec!["203.0.113.0/24".parse().unwrap()], "test-sensor".into());
+        let mut eng = Engine::new(
+            &cfg,
+            Arc::new(NullIntel),
+            None,
+            counters(),
+            vec!["203.0.113.0/24".parse().unwrap()],
+            "test-sensor".into(),
+        );
         let base = SystemTime::now();
         let mut fired = 0;
         for p in 0..cfg.port_scan.min_targets as u16 {
-            fired += eng.process(&syn("203.0.113.9", "198.51.100.5", 100 + p, base)).len();
+            fired += eng
+                .process(&syn("203.0.113.9", "198.51.100.5", 100 + p, base))
+                .len();
         }
         assert_eq!(fired, 0, "allowlisted peer must not alert");
     }
@@ -157,11 +166,20 @@ mod tests {
     fn engine_emits_scan_and_counts_it() {
         let cfg = RulesConfig::default();
         let c = counters();
-        let mut eng = Engine::new(&cfg, Arc::new(NullIntel), None, Arc::clone(&c), Vec::new(), "test-sensor".into());
+        let mut eng = Engine::new(
+            &cfg,
+            Arc::new(NullIntel),
+            None,
+            Arc::clone(&c),
+            Vec::new(),
+            "test-sensor".into(),
+        );
         let base = SystemTime::now();
         let mut total = 0;
         for p in 0..cfg.port_scan.min_targets as u16 + 5 {
-            total += eng.process(&syn("203.0.113.77", "198.51.100.5", 1000 + p, base)).len();
+            total += eng
+                .process(&syn("203.0.113.77", "198.51.100.5", 1000 + p, base))
+                .len();
         }
         assert!(total >= 1);
         assert_eq!(c.alerts_for(RuleIdKey::PortScan), 1);
@@ -176,14 +194,32 @@ mod tests {
         cfg.port_scan.min_targets = 2;
         cfg.port_scan.window_s = 300;
         cfg.port_scan.cooldown_s = 3600;
-        let mut eng = Engine::new(&cfg, Arc::new(NullIntel), None, counters(), Vec::new(), "test-sensor".into());
+        let mut eng = Engine::new(
+            &cfg,
+            Arc::new(NullIntel),
+            None,
+            counters(),
+            Vec::new(),
+            "test-sensor".into(),
+        );
         let base = SystemTime::now();
-        let a = eng.process(&syn("198.51.100.9", "203.0.113.5", 1, base)).len();
-        let b = eng.process(&syn("198.51.100.9", "203.0.113.5", 2, base)).len();
+        let a = eng
+            .process(&syn("198.51.100.9", "203.0.113.5", 1, base))
+            .len();
+        let b = eng
+            .process(&syn("198.51.100.9", "203.0.113.5", 2, base))
+            .len();
         let _ = a;
         assert_eq!(b, 1, "first crossing should alert");
         // A second crossing right away is within cooldown -> suppressed.
-        let c = eng.process(&syn("198.51.100.9", "203.0.113.5", 3, base + Duration::from_secs(1))).len();
+        let c = eng
+            .process(&syn(
+                "198.51.100.9",
+                "203.0.113.5",
+                3,
+                base + Duration::from_secs(1),
+            ))
+            .len();
         assert_eq!(c, 0, "cooldown should suppress the second alert");
     }
 }

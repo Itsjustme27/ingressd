@@ -31,10 +31,18 @@ use enforce::Enforcer;
 use sinks::{run_webhook, Sink};
 
 #[derive(Parser)]
-#[command(name = "ingressd", version, about = "Passive public-IP traffic threat detector")]
+#[command(
+    name = "ingressd",
+    version,
+    about = "Passive public-IP traffic threat detector"
+)]
 struct Cli {
     /// Path to config.toml.
-    #[arg(long, env = "INGRESSD_CONFIG", default_value = "/etc/ingressd/config.toml")]
+    #[arg(
+        long,
+        env = "INGRESSD_CONFIG",
+        default_value = "/etc/ingressd/config.toml"
+    )]
     config: String,
     /// Live capture interface (overrides config; empty = auto-detect default route).
     #[arg(long)]
@@ -106,7 +114,9 @@ async fn main() -> anyhow::Result<()> {
 
     if let Some(Command::GenPcap { out }) = &cli.command {
         let frames = ingressd_core::gen::attack_scenario();
-        let mut w = ingressd_core::pcap::PcapWriter::new(std::io::BufWriter::new(std::fs::File::create(out)?))?;
+        let mut w = ingressd_core::pcap::PcapWriter::new(std::io::BufWriter::new(
+            std::fs::File::create(out)?,
+        ))?;
         for (ts, f) in &frames {
             w.write_packet(*ts, f)?;
         }
@@ -122,7 +132,8 @@ async fn main() -> anyhow::Result<()> {
 
     if let Some(Command::Snort2Sigma { input, out }) = &cli.command {
         let vars = ingressd_core::snort::VarMap::new();
-        let text = std::fs::read_to_string(input).map_err(|e| anyhow::anyhow!("read {input}: {e}"))?;
+        let text =
+            std::fs::read_to_string(input).map_err(|e| anyhow::anyhow!("read {input}: {e}"))?;
         let yaml = ingressd_core::snort::snort_text_to_sigma(&text, &vars);
         match out {
             Some(p) => {
@@ -167,7 +178,13 @@ async fn main() -> anyhow::Result<()> {
     let is_live = source == SourceKind::Live;
 
     // Host addresses: configured base, plus live interface addresses in live mode.
-    let base_hosts: Vec<IpAddr> = cfg.general.host_ips.iter().filter_map(|s| parse_cidr(s)).map(|n| n.addr()).collect();
+    let base_hosts: Vec<IpAddr> = cfg
+        .general
+        .host_ips
+        .iter()
+        .filter_map(|s| parse_cidr(s))
+        .map(|n| n.addr())
+        .collect();
     let mut ha = HostAddrs::new();
     ha.set(current_hosts(&base_hosts));
     let host: HostHandle = Arc::new(RwLock::new(ha));
@@ -184,23 +201,44 @@ async fn main() -> anyhow::Result<()> {
     let intel_arc: IntelArc = Arc::clone(&store);
     let geo = load_geo(cfg.intel.geoip_db.as_ref());
 
-    let allowlist: Vec<IpNet> = cfg.general.allowlist.iter().filter_map(|s| parse_cidr(s)).collect();
+    let allowlist: Vec<IpNet> = cfg
+        .general
+        .allowlist
+        .iter()
+        .filter_map(|s| parse_cidr(s))
+        .collect();
     let sensor = resolve_sensor(&cfg);
-    let mut engine = Engine::new(&cfg.rules, intel_arc.clone(), geo.clone(), counters.clone(), allowlist, sensor.clone());
+    let mut engine = Engine::new(
+        &cfg.rules,
+        intel_arc.clone(),
+        geo.clone(),
+        counters.clone(),
+        allowlist,
+        sensor.clone(),
+    );
     engine.set_listening_ports(&listener::listen_ports());
     counters.set_custom_signatures(cfg.rules.signature.len() as u64);
     tracing::info!(rules = ?engine.active_rules(), "detection engine ready");
 
     let (mut sink, webhook_rx) = Sink::new(&cfg.sinks, counters.clone());
     if let (Some(rx), Some(url)) = (webhook_rx, cfg.sinks.webhook_url.clone()) {
-        tokio::spawn(run_webhook(rx, url, cfg.sinks.webhook_token.clone(), make_client()));
+        tokio::spawn(run_webhook(
+            rx,
+            url,
+            cfg.sinks.webhook_token.clone(),
+            make_client(),
+        ));
     }
 
     let started = Instant::now();
     let ready = Arc::new(AtomicBool::new(false));
 
     if cfg.metrics.enabled {
-        let addr: SocketAddr = cfg.metrics.listen.parse().unwrap_or_else(|_| SocketAddr::from(([127, 0, 0, 1], 9102)));
+        let addr: SocketAddr = cfg
+            .metrics
+            .listen
+            .parse()
+            .unwrap_or_else(|_| SocketAddr::from(([127, 0, 0, 1], 9102)));
         let c = Arc::clone(&counters);
         let r = Arc::clone(&ready);
         tokio::spawn(async move {
@@ -216,7 +254,13 @@ async fn main() -> anyhow::Result<()> {
 
     let (tx, mut rx) = event_channel(cfg.general.channel_capacity);
     let cap_stop = Arc::new(AtomicBool::new(false));
-    start_capture(&cfg, host.clone(), tx, Arc::clone(&counters), cap_stop.clone())?;
+    start_capture(
+        &cfg,
+        host.clone(),
+        tx,
+        Arc::clone(&counters),
+        cap_stop.clone(),
+    )?;
     ready.store(true, Ordering::Relaxed);
 
     // Signal flags (SIGHUP reload, SIGTERM shutdown) via a dedicated task.
@@ -224,8 +268,10 @@ async fn main() -> anyhow::Result<()> {
     let reload_flag = Arc::new(AtomicBool::new(false));
     spawn_signal_task(Arc::clone(&stop_now), Arc::clone(&reload_flag));
 
-    let mut listen_interval = tokio::time::interval(Duration::from_secs(cfg.general.refresh_host_secs.max(5)));
-    let mut feed_interval = tokio::time::interval(Duration::from_secs(cfg.intel.refresh_secs.max(60)));
+    let mut listen_interval =
+        tokio::time::interval(Duration::from_secs(cfg.general.refresh_host_secs.max(5)));
+    let mut feed_interval =
+        tokio::time::interval(Duration::from_secs(cfg.intel.refresh_secs.max(60)));
     let mut poll = tokio::time::interval(Duration::from_millis(500));
     listen_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     feed_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -259,7 +305,11 @@ async fn main() -> anyhow::Result<()> {
 
     cap_stop.store(true, Ordering::Relaxed);
     write_run_state(cache.as_deref(), &counters, started);
-    tracing::info!(packets = counters.packets(), alerts = counters.alerts_total(), "ingressd stopped");
+    tracing::info!(
+        packets = counters.packets(),
+        alerts = counters.alerts_total(),
+        "ingressd stopped"
+    );
     Ok(())
 }
 
@@ -282,7 +332,14 @@ fn handle_event(
     }
 }
 
-fn do_reload(cli: &Cli, cfg: &mut Config, engine: &mut Engine, sink: &mut Sink, intel: &IntelArc, counters: &Arc<Counters>) {
+fn do_reload(
+    cli: &Cli,
+    cfg: &mut Config,
+    engine: &mut Engine,
+    sink: &mut Sink,
+    intel: &IntelArc,
+    counters: &Arc<Counters>,
+) {
     let mut new = match Config::load(&cli.config).map(|c| apply_cli(c, cli)) {
         Ok(c) => c,
         Err(e) => {
@@ -296,28 +353,59 @@ fn do_reload(cli: &Cli, cfg: &mut Config, engine: &mut Engine, sink: &mut Sink, 
     }
     new.rules.signature.extend(collect_custom_signatures(&new));
     let geo = load_geo(new.intel.geoip_db.as_ref());
-    let allow: Vec<IpNet> = new.general.allowlist.iter().filter_map(|s| parse_cidr(s)).collect();
-    *engine = Engine::new(&new.rules, intel.clone(), geo, counters.clone(), allow, resolve_sensor(&new));
+    let allow: Vec<IpNet> = new
+        .general
+        .allowlist
+        .iter()
+        .filter_map(|s| parse_cidr(s))
+        .collect();
+    *engine = Engine::new(
+        &new.rules,
+        intel.clone(),
+        geo,
+        counters.clone(),
+        allow,
+        resolve_sensor(&new),
+    );
     engine.set_listening_ports(&listener::listen_ports());
     counters.set_custom_signatures(new.rules.signature.len() as u64);
     let (new_sink, wrx) = Sink::new(&new.sinks, counters.clone());
     *sink = new_sink;
     if let (Some(rx), Some(url)) = (wrx, new.sinks.webhook_url.clone()) {
-        tokio::spawn(run_webhook(rx, url, new.sinks.webhook_token.clone(), make_client()));
+        tokio::spawn(run_webhook(
+            rx,
+            url,
+            new.sinks.webhook_token.clone(),
+            make_client(),
+        ));
     }
     *cfg = new;
     tracing::info!("configuration reloaded");
 }
 
-fn start_capture(cfg: &Config, host: HostHandle, tx: ingressd_capture::EventTx, counters: Arc<Counters>, cap_stop: Arc<AtomicBool>) -> anyhow::Result<()> {
+fn start_capture(
+    cfg: &Config,
+    host: HostHandle,
+    tx: ingressd_capture::EventTx,
+    counters: Arc<Counters>,
+    cap_stop: Arc<AtomicBool>,
+) -> anyhow::Result<()> {
     match cfg.source().map_err(|e| anyhow::anyhow!(e))? {
         SourceKind::Pcap => {
-            let p = cfg.general.pcap.clone().ok_or_else(|| anyhow::anyhow!("pcap source selected but unset"))?;
+            let p = cfg
+                .general
+                .pcap
+                .clone()
+                .ok_or_else(|| anyhow::anyhow!("pcap source selected but unset"))?;
             ingressd_capture::pcap_file::spawn(&p, host, tx, counters);
             tracing::info!(path = %p.display(), "replaying pcap");
         }
         SourceKind::FlowLog => {
-            let p = cfg.general.flow_log.clone().ok_or_else(|| anyhow::anyhow!("flow_log source selected but unset"))?;
+            let p = cfg
+                .general
+                .flow_log
+                .clone()
+                .ok_or_else(|| anyhow::anyhow!("flow_log source selected but unset"))?;
             ingressd_capture::flowlog::spawn(&p, host, tx, counters);
             tracing::info!(path = %p.display(), "reading flow logs");
         }
@@ -325,8 +413,15 @@ fn start_capture(cfg: &Config, host: HostHandle, tx: ingressd_capture::EventTx, 
             #[cfg(all(target_os = "linux", feature = "live-capture"))]
             {
                 let policy = ingressd_capture::QueuePolicy::parse(&cfg.general.on_queue_full);
-                ingressd_capture::afpacket::spawn(&cfg.general.iface, host, tx, counters, cap_stop, policy)
-                    .map_err(|e| anyhow::anyhow!("live capture: {e}"))?;
+                ingressd_capture::afpacket::spawn(
+                    &cfg.general.iface,
+                    host,
+                    tx,
+                    counters,
+                    cap_stop,
+                    policy,
+                )
+                .map_err(|e| anyhow::anyhow!("live capture: {e}"))?;
                 tracing::info!(iface = %iface_or_auto(&cfg.general.iface), queue = %cfg.general.on_queue_full, "live capture running");
             }
             #[cfg(not(all(target_os = "linux", feature = "live-capture")))]
@@ -383,7 +478,10 @@ fn build_specs(cfg: &Config) -> Vec<FeedSpec> {
             (_, Some(p)) => FeedLocation::File(p.clone()),
             (None, None) => continue,
         };
-        out.push(FeedSpec { name: f.name.clone(), location: loc });
+        out.push(FeedSpec {
+            name: f.name.clone(),
+            location: loc,
+        });
     }
     out
 }
@@ -392,7 +490,11 @@ fn never_block_set() -> HashSet<IpAddr> {
     let mut set: HashSet<IpAddr> = listener::resolver_ips().into_iter().collect();
     for var in ["SSH_CLIENT", "SSH_CONNECTION"] {
         if let Ok(v) = std::env::var(var) {
-            if let Some(first) = v.split_whitespace().next().and_then(|s| s.parse::<IpAddr>().ok()) {
+            if let Some(first) = v
+                .split_whitespace()
+                .next()
+                .and_then(|s| s.parse::<IpAddr>().ok())
+            {
                 set.insert(first);
             }
         }
@@ -410,7 +512,13 @@ fn load_config(cli: &Cli) -> Result<Config, String> {
     let cfg = apply_cli(base, cli);
     cfg.validate().map_err(|errs| errs.join("\n"))?;
     let extra = collect_custom_signatures(&cfg);
-    let cfg = if extra.is_empty() { cfg } else { let mut c = cfg; c.rules.signature.extend(extra); c };
+    let cfg = if extra.is_empty() {
+        cfg
+    } else {
+        let mut c = cfg;
+        c.rules.signature.extend(extra);
+        c
+    };
     Ok(cfg)
 }
 
@@ -532,7 +640,10 @@ fn init_tracing(level: &str) {
     use tracing_subscriber::EnvFilter;
     let default = format!("warn,ingressd={level}");
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default));
-    let _ = tracing_subscriber::fmt().with_env_filter(filter).with_target(true).try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(true)
+        .try_init();
 }
 
 /// Spawn a task that sets shutdown/reload flags on SIGTERM/SIGHUP. On non-Unix
@@ -548,7 +659,9 @@ fn spawn_signal_task(stop_now: Arc<AtomicBool>, reload_flag: Arc<AtomicBool>) {
                     _ = hup.recv() => { reload_flag.store(true, Ordering::Relaxed); }
                 }
             },
-            Err(e) => tracing::warn!("signal setup failed ({e}); reload/shutdown via signals unavailable"),
+            Err(e) => {
+                tracing::warn!("signal setup failed ({e}); reload/shutdown via signals unavailable")
+            }
         }
     });
 }
@@ -557,7 +670,11 @@ fn spawn_signal_task(stop_now: Arc<AtomicBool>, reload_flag: Arc<AtomicBool>) {
 fn spawn_signal_task(_stop_now: Arc<AtomicBool>, _reload_flag: Arc<AtomicBool>) {}
 
 #[cfg(unix)]
-fn unix_signals() -> anyhow::Result<(tokio::signal::unix::Signal, tokio::signal::unix::Signal, tokio::signal::unix::Signal)> {
+fn unix_signals() -> anyhow::Result<(
+    tokio::signal::unix::Signal,
+    tokio::signal::unix::Signal,
+    tokio::signal::unix::Signal,
+)> {
     use tokio::signal::unix::{signal, SignalKind};
     Ok((
         signal(SignalKind::terminate())?,

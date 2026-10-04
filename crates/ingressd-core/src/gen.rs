@@ -48,12 +48,26 @@ fn ipv4(proto: u8, src: Ipv4Addr, dst: Ipv4Addr, l4: &[u8]) -> Vec<u8> {
 }
 
 /// TCP frame.
-pub fn tcp(src: Ipv4Addr, dst: Ipv4Addr, sport: u16, dport: u16, flags: u8, payload_len: usize) -> Vec<u8> {
+pub fn tcp(
+    src: Ipv4Addr,
+    dst: Ipv4Addr,
+    sport: u16,
+    dport: u16,
+    flags: u8,
+    payload_len: usize,
+) -> Vec<u8> {
     tcp_payload(src, dst, sport, dport, flags, &vec![0u8; payload_len])
 }
 
 /// TCP frame carrying an explicit `payload` slice.
-pub fn tcp_payload(src: Ipv4Addr, dst: Ipv4Addr, sport: u16, dport: u16, flags: u8, payload: &[u8]) -> Vec<u8> {
+pub fn tcp_payload(
+    src: Ipv4Addr,
+    dst: Ipv4Addr,
+    sport: u16,
+    dport: u16,
+    flags: u8,
+    payload: &[u8],
+) -> Vec<u8> {
     let mut t = vec![0u8; 20];
     t[0..2].copy_from_slice(&sport.to_be_bytes());
     t[2..4].copy_from_slice(&dport.to_be_bytes());
@@ -176,11 +190,17 @@ pub fn attack_scenario() -> Vec<(SystemTime, Vec<u8>)> {
         "q7w8e9r0t1.tunnel5r.example.org",
     ];
     for (i, n) in names.iter().enumerate() {
-        s.push((at(8 + i as u64), dns_query(HOST, attacker(8), 51000 + i as u16, n, 1)));
+        s.push((
+            at(8 + i as u64),
+            dns_query(HOST, attacker(8), 51000 + i as u16, n, 1),
+        ));
     }
     // beaconing: 4 outbound connections at exact 60s spacing.
     for i in 0..4u64 {
-        s.push((at(100 + i * 60), tcp(HOST, attacker(9), 52000, 9999, TCP_SYN, 0)));
+        s.push((
+            at(100 + i * 60),
+            tcp(HOST, attacker(9), 52000, 9999, TCP_SYN, 0),
+        ));
     }
     // threat-intel: one listed IP.
     s.push((at(200), tcp(attacker(10), HOST, 43000, 80, TCP_ACK, 10)));
@@ -192,10 +212,23 @@ pub fn attack_scenario() -> Vec<(SystemTime, Vec<u8>)> {
     }
     // syn-flood: 25 SYNs to :80, 2 SYN-ACK completions.
     for i in 0..25u16 {
-        s.push((at(300 + i as u64 / 10), tcp(attacker(20 + (i % 10) as u8), HOST, 47000 + i, 80, TCP_SYN, 0)));
+        s.push((
+            at(300 + i as u64 / 10),
+            tcp(
+                attacker(20 + (i % 10) as u8),
+                HOST,
+                47000 + i,
+                80,
+                TCP_SYN,
+                0,
+            ),
+        ));
     }
     for i in 0..2u16 {
-        s.push((at(302), tcp(HOST, attacker(20 + i as u8), 80, 47000 + i, TCP_SYN_ACK, 0)));
+        s.push((
+            at(302),
+            tcp(HOST, attacker(20 + i as u8), 80, 47000 + i, TCP_SYN_ACK, 0),
+        ));
     }
     s
 }
@@ -229,7 +262,13 @@ mod tests {
 
     #[test]
     fn dns_qname_roundtrips() {
-        let frame = dns_query(Ipv4Addr::new(203, 0, 113, 9), Ipv4Addr::new(8, 8, 8, 8), 51234, "sub.example.com", 1);
+        let frame = dns_query(
+            Ipv4Addr::new(203, 0, 113, 9),
+            Ipv4Addr::new(8, 8, 8, 8),
+            51234,
+            "sub.example.com",
+            1,
+        );
         let pkt = decode_frame(&frame).unwrap();
         match pkt.transport {
             crate::decode::Transport::Udp(u) => {

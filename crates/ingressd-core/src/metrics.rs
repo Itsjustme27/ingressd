@@ -139,20 +139,60 @@ impl Counters {
         use std::fmt::Write as _;
         let mut s = String::with_capacity(1024);
         let counters = [
-            ("ingressd_packets_total", "counter", self.packets.load(Ordering::Relaxed), "Packets decoded"),
-            ("ingressd_bytes_total", "counter", self.bytes.load(Ordering::Relaxed), "Wire bytes decoded"),
-            ("ingressd_parse_errors_total", "counter", self.parse_errors.load(Ordering::Relaxed), "Malformed frames"),
-            ("ingressd_drops_total", "counter", self.drops.load(Ordering::Relaxed), "Events dropped at full channel"),
+            (
+                "ingressd_packets_total",
+                "counter",
+                self.packets.load(Ordering::Relaxed),
+                "Packets decoded",
+            ),
+            (
+                "ingressd_bytes_total",
+                "counter",
+                self.bytes.load(Ordering::Relaxed),
+                "Wire bytes decoded",
+            ),
+            (
+                "ingressd_parse_errors_total",
+                "counter",
+                self.parse_errors.load(Ordering::Relaxed),
+                "Malformed frames",
+            ),
+            (
+                "ingressd_drops_total",
+                "counter",
+                self.drops.load(Ordering::Relaxed),
+                "Events dropped at full channel",
+            ),
             (
                 "ingressd_skipped_nonpublic_total",
                 "counter",
                 self.skipped_nonpublic.load(Ordering::Relaxed),
                 "Peers skipped as non-public",
             ),
-            ("ingressd_evictions_total", "counter", self.evictions.load(Ordering::Relaxed), "LRU key evictions"),
-            ("ingressd_alerts_total", "counter", self.alerts_total.load(Ordering::Relaxed), "Alerts emitted"),
-            ("ingressd_tracked_keys", "gauge", self.tracked_keys.load(Ordering::Relaxed), "Tracked window keys"),
-            ("ingressd_channel_depth", "gauge", self.channel_depth.load(Ordering::Relaxed), "Capture channel depth"),
+            (
+                "ingressd_evictions_total",
+                "counter",
+                self.evictions.load(Ordering::Relaxed),
+                "LRU key evictions",
+            ),
+            (
+                "ingressd_alerts_total",
+                "counter",
+                self.alerts_total.load(Ordering::Relaxed),
+                "Alerts emitted",
+            ),
+            (
+                "ingressd_tracked_keys",
+                "gauge",
+                self.tracked_keys.load(Ordering::Relaxed),
+                "Tracked window keys",
+            ),
+            (
+                "ingressd_channel_depth",
+                "gauge",
+                self.channel_depth.load(Ordering::Relaxed),
+                "Capture channel depth",
+            ),
             (
                 "ingressd_intel_feed_age_seconds",
                 "gauge",
@@ -176,7 +216,11 @@ impl Counters {
         if let Ok(m) = self.alerts_by_rule.lock() {
             for rule in RuleId::ALL {
                 let v = m.get(rule.as_str()).copied().unwrap_or(0);
-                let _ = writeln!(s, "ingressd_alerts_by_rule{{rule=\"{}\"}} {v}", rule.as_str());
+                let _ = writeln!(
+                    s,
+                    "ingressd_alerts_by_rule{{rule=\"{}\"}} {v}",
+                    rule.as_str()
+                );
             }
         }
         s

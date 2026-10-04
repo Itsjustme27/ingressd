@@ -28,7 +28,9 @@ fn snort_content_rule_enforces_and_spares_benign() {
     let vars = snort::VarMap::new();
     let parsed = snort::parse_str(RULE, &vars);
     assert_eq!(parsed.len(), 1, "rule should parse");
-    let sig = parsed[0].to_signature().expect("rule should be enforceable");
+    let sig = parsed[0]
+        .to_signature()
+        .expect("rule should be enforceable");
     assert_eq!(sig.direction.as_deref(), Some("in"));
     assert_eq!(sig.ports, vec![80]);
     assert!(sig.nocase);
@@ -41,7 +43,14 @@ fn snort_content_rule_enforces_and_spares_benign() {
     ha.set([IpAddr::V4(gen::HOST)]);
     let host = Arc::new(RwLock::new(ha));
     let counters = Arc::new(Counters::new());
-    let mut engine = Engine::new(&cfg, Arc::new(NullIntel), None, Arc::clone(&counters), Vec::new(), "snort-test".into());
+    let mut engine = Engine::new(
+        &cfg,
+        Arc::new(NullIntel),
+        None,
+        Arc::clone(&counters),
+        Vec::new(),
+        "snort-test".into(),
+    );
 
     let base = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
     let mut fired: HashSet<RuleId> = HashSet::new();
@@ -62,15 +71,39 @@ fn snort_content_rule_enforces_and_spares_benign() {
     // 3. Malicious inbound on :80 with the (mixed-case) content -> must fire.
     feed(
         base,
-        gen::tcp_payload(ATTACKER, gen::HOST, 51000, 80, gen::TCP_ACK, b"GET /c2 HTTP/1.1\r\nX-EvIlBeAcOn: yes\r\n"),
+        gen::tcp_payload(
+            ATTACKER,
+            gen::HOST,
+            51000,
+            80,
+            gen::TCP_ACK,
+            b"GET /c2 HTTP/1.1\r\nX-EvIlBeAcOn: yes\r\n",
+        ),
     );
     // 4. Benign inbound on :80 without the content -> must NOT fire.
     feed(
         base + Duration::from_secs(1),
-        gen::tcp_payload(BENIGN, gen::HOST, 51001, 80, gen::TCP_ACK, b"GET /index.html HTTP/1.1\r\n"),
+        gen::tcp_payload(
+            BENIGN,
+            gen::HOST,
+            51001,
+            80,
+            gen::TCP_ACK,
+            b"GET /index.html HTTP/1.1\r\n",
+        ),
     );
 
-    assert!(fired.contains(&RuleId::CustomSignature), "snort content rule did not fire: {fired:?}");
-    assert_eq!(benign_hits, 0, "benign traffic must not trigger the snort rule");
-    assert_eq!(counters.alerts_for(RuleId::CustomSignature), 1, "exactly one custom alert");
+    assert!(
+        fired.contains(&RuleId::CustomSignature),
+        "snort content rule did not fire: {fired:?}"
+    );
+    assert_eq!(
+        benign_hits, 0,
+        "benign traffic must not trigger the snort rule"
+    );
+    assert_eq!(
+        counters.alerts_for(RuleId::CustomSignature),
+        1,
+        "exactly one custom alert"
+    );
 }

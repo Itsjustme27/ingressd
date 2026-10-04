@@ -26,7 +26,14 @@ fn stress_replay_is_bounded_and_benign_clean() {
     // Small per-rule key cap to force LRU eviction under the flood volume.
     let mut cfg = RulesConfig::default();
     cfg.max_tracked_keys = 64;
-    let mut engine = Engine::new(&cfg, Arc::new(NullIntel), None, Arc::clone(&counters), Vec::new(), "stress".into());
+    let mut engine = Engine::new(
+        &cfg,
+        Arc::new(NullIntel),
+        None,
+        Arc::clone(&counters),
+        Vec::new(),
+        "stress".into(),
+    );
 
     // Replay the scenario 200x with advancing time so windows churn.
     let mut fired_by_rule: HashMap<&str, u32> = HashMap::new();
@@ -58,13 +65,23 @@ fn stress_replay_is_bounded_and_benign_clean() {
     // 2. Memory guard: per-rule key caps are honored (tracked_keys stays bounded).
     //    14 rules * (cap + cooldown map) => a few hundred at most, not frames*rules.
     let tracked = counters.tracked_keys();
-    assert!(tracked <= 14 * (cfg.max_tracked_keys as u64) * 2, "tracked_keys unbounded: {tracked}");
+    assert!(
+        tracked <= 14 * (cfg.max_tracked_keys as u64) * 2,
+        "tracked_keys unbounded: {tracked}"
+    );
 
     // 3. Evictions actually happened (proves the LRU cap is exercised).
-    assert!(counters.evictions() > 0, "expected LRU evictions at cap {}", cfg.max_tracked_keys);
+    assert!(
+        counters.evictions() > 0,
+        "expected LRU evictions at cap {}",
+        cfg.max_tracked_keys
+    );
 
     // 4. Core rules still fired across the run (determinism under volume).
     for r in ["port-scan", "brute-force", "syn-flood", "suspicious-port"] {
-        assert!(fired_by_rule.contains_key(r), "{r} never fired: {fired_by_rule:?}");
+        assert!(
+            fired_by_rule.contains_key(r),
+            "{r} never fired: {fired_by_rule:?}"
+        );
     }
 }

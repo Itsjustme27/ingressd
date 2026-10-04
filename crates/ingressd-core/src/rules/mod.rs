@@ -40,13 +40,20 @@ pub struct Cooldown<K: Eq + std::hash::Hash + Clone> {
 impl<K: Eq + std::hash::Hash + Clone> Cooldown<K> {
     /// A cooldown that remembers at most `cap` keys.
     pub fn new(cap: usize, dur: Duration) -> Self {
-        Cooldown { map: BoundedMap::new(cap), dur }
+        Cooldown {
+            map: BoundedMap::new(cap),
+            dur,
+        }
     }
 
     /// True if an alert for `key` may be emitted now; records the emission.
     pub fn allow(&mut self, key: &K, now: SystemTime) -> bool {
         if let Some(&last) = self.map.get(key) {
-            if now.duration_since(last).map(|d| d < self.dur).unwrap_or(false) {
+            if now
+                .duration_since(last)
+                .map(|d| d < self.dur)
+                .unwrap_or(false)
+            {
                 return false;
             }
         }
@@ -81,7 +88,9 @@ pub fn bump_window(deq: &mut VecDeque<SystemTime>, now: SystemTime, window: Dura
 
 /// Whole seconds between two times, saturating at 0.
 pub fn delta_secs(a: SystemTime, b: SystemTime) -> f64 {
-    b.checked_duration_since(a).map(|d| d.as_secs_f64()).unwrap_or(0.0)
+    b.checked_duration_since(a)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0)
 }
 
 /// Shannon entropy in bits per character.
@@ -128,6 +137,13 @@ pub fn new_bounded<K: Eq + std::hash::Hash + Clone, V>(cap: usize) -> BoundedMap
 }
 
 /// Helper used by detectors to make an alert draft with the rule id attached.
-pub fn draft(ev: &PacketEvent, rule: RuleId, severity: crate::types::Severity, detail: String, count: u64, window_s: u64) -> AlertDraft {
+pub fn draft(
+    ev: &PacketEvent,
+    rule: RuleId,
+    severity: crate::types::Severity,
+    detail: String,
+    count: u64,
+    window_s: u64,
+) -> AlertDraft {
     AlertDraft::from_event(ev, severity, detail, count, window_s, rule)
 }

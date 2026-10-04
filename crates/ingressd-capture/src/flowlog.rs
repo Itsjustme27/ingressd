@@ -112,18 +112,38 @@ fn parse_aws_text(line: &str) -> Option<FlowRecord> {
     let dport = parse_opt_port(f[6]);
     let proto = f[7].parse::<u8>().unwrap_or(0);
     let start = f[10].parse::<u64>().unwrap_or(0);
-    Some(FlowRecord { src, dst, sport, dport, proto, start })
+    Some(FlowRecord {
+        src,
+        dst,
+        sport,
+        dport,
+        proto,
+        start,
+    })
 }
 
 fn parse_json(line: &str) -> Option<FlowRecord> {
     let v: Value = serde_json::from_str(line).ok()?;
-    let src = field(&v, &["srcaddr", "src_ip", "srcIp", "sourceIPAddress"]).and_then(|s| s.parse().ok())?;
-    let dst = field(&v, &["dstaddr", "dst_ip", "dstIp", "destinationIPAddress"]).and_then(|s| s.parse().ok())?;
+    let src = field(&v, &["srcaddr", "src_ip", "srcIp", "sourceIPAddress"])
+        .and_then(|s| s.parse().ok())?;
+    let dst = field(&v, &["dstaddr", "dst_ip", "dstIp", "destinationIPAddress"])
+        .and_then(|s| s.parse().ok())?;
     let sport = field(&v, &["srcport", "src_port", "srcPort"]).and_then(parse_opt_port_owned);
     let dport = field(&v, &["dstport", "dst_port", "dstPort"]).and_then(parse_opt_port_owned);
-    let proto = field(&v, &["protocol"]).and_then(|s| s.parse::<u8>().ok()).unwrap_or(0);
-    let start = field(&v, &["start", "start_time", "startTime"]).and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
-    Some(FlowRecord { src, dst, sport, dport, proto, start })
+    let proto = field(&v, &["protocol"])
+        .and_then(|s| s.parse::<u8>().ok())
+        .unwrap_or(0);
+    let start = field(&v, &["start", "start_time", "startTime"])
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(0);
+    Some(FlowRecord {
+        src,
+        dst,
+        sport,
+        dport,
+        proto,
+        start,
+    })
 }
 
 /// Return the first present field as a string (numbers stringified).
@@ -154,7 +174,12 @@ fn epoch(secs: u64) -> SystemTime {
 }
 
 /// Spawn a thread that parses a flow-log file (`-` = stdin) into `tx`.
-pub fn spawn(path: &Path, host: HostHandle, tx: EventTx, counters: Arc<Counters>) -> JoinHandle<()> {
+pub fn spawn(
+    path: &Path,
+    host: HostHandle,
+    tx: EventTx,
+    counters: Arc<Counters>,
+) -> JoinHandle<()> {
     let path = path.to_path_buf();
     std::thread::Builder::new()
         .name("ingressd-flowlog".to_string())

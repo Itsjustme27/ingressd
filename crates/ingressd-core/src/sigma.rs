@@ -42,7 +42,10 @@ fn tactic_tag(rule: RuleId) -> &'static str {
 
 fn sigma_level(rule: RuleId) -> &'static str {
     match rule {
-        RuleId::ThreatIntelHit | RuleId::ReflectionAmplification | RuleId::SynFlood | RuleId::Beaconing => "critical",
+        RuleId::ThreatIntelHit
+        | RuleId::ReflectionAmplification
+        | RuleId::SynFlood
+        | RuleId::Beaconing => "critical",
         RuleId::UdpFlood | RuleId::IcmpFlood | RuleId::BruteForce => "high",
         RuleId::DnsTunnel | RuleId::IcmpTunnel => "medium",
         RuleId::PortScan | RuleId::InvalidTcpFlags => "medium",

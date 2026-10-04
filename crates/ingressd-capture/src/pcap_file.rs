@@ -15,7 +15,12 @@ use ingressd_core::pcap::PcapReader;
 use crate::{frame_to_event, EventTx, HostHandle};
 
 /// Spawn a thread that replays `path` into `tx`.
-pub fn spawn(path: &Path, host: HostHandle, tx: EventTx, counters: Arc<Counters>) -> JoinHandle<()> {
+pub fn spawn(
+    path: &Path,
+    host: HostHandle,
+    tx: EventTx,
+    counters: Arc<Counters>,
+) -> JoinHandle<()> {
     let path = path.to_path_buf();
     std::thread::Builder::new()
         .name("ingressd-pcap".to_string())

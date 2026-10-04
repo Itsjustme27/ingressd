@@ -6,8 +6,9 @@ use std::net::IpAddr;
 use std::time::{Duration, SystemTime};
 
 use crate::config::{
-    BeaconingCfg, BruteForceCfg, CountCfg, DnsTunnelCfg, IcmpTunnelCfg, NewListenerCfg, PortListCfg, PortScanCfg, RateCfg,
-    ReflectionCfg, RulesConfig, SignatureCfg, SimpleCfg, SynFloodCfg,
+    BeaconingCfg, BruteForceCfg, CountCfg, DnsTunnelCfg, IcmpTunnelCfg, NewListenerCfg,
+    PortListCfg, PortScanCfg, RateCfg, ReflectionCfg, RulesConfig, SignatureCfg, SimpleCfg,
+    SynFloodCfg,
 };
 use crate::intel::IntelArc;
 use crate::state::BoundedMap;
@@ -71,7 +72,13 @@ fn contains(hay: &[u8], needle: &[u8]) -> bool {
 
 /// Snort-style content match honoring `offset` (start) and `depth` (window size)
 /// relative to the payload, with optional ASCII case-folding.
-fn content_match(payload: &[u8], needle: &[u8], nocase: bool, offset: Option<usize>, depth: Option<usize>) -> bool {
+fn content_match(
+    payload: &[u8],
+    needle: &[u8],
+    nocase: bool,
+    offset: Option<usize>,
+    depth: Option<usize>,
+) -> bool {
     if needle.is_empty() {
         return false;
     }
@@ -150,7 +157,14 @@ impl Detector for PortScanDetector {
                     uniq_ips.len(),
                     uniq_ports.len()
                 );
-                out.push(draft(ev, RuleId::PortScan, sev, detail, distinct as u64, win_s));
+                out.push(draft(
+                    ev,
+                    RuleId::PortScan,
+                    sev,
+                    detail,
+                    distinct as u64,
+                    win_s,
+                ));
             }
             m.clear();
         }
@@ -201,7 +215,14 @@ impl Detector for InvalidFlagsDetector {
         let count = bump_window(deq, now, win);
         if count >= thr as u64 && self.cooldown.allow(&peer, now) {
             let detail = format!("invalid TCP flags ({name}): {count} packets in {win_s}s");
-            out.push(draft(ev, RuleId::InvalidTcpFlags, sev, detail, count, win_s));
+            out.push(draft(
+                ev,
+                RuleId::InvalidTcpFlags,
+                sev,
+                detail,
+                count,
+                win_s,
+            ));
         }
     }
     fn tracked_keys(&self) -> usize {
@@ -250,11 +271,16 @@ impl Detector for BruteForceDetector {
         let peer = ev.peer_ip;
         let now = ev.ts;
         let (thr, win, sev, win_s) = (self.threshold, self.win, self.sev, self.win_s);
-        let entry = self.state.get_or_insert_with(peer, || (VecDeque::new(), HashSet::new()));
+        let entry = self
+            .state
+            .get_or_insert_with(peer, || (VecDeque::new(), HashSet::new()));
         let count = bump_window(&mut entry.0, now, win);
         entry.1.insert(dport);
         if count >= thr as u64 && self.cooldown.allow(&peer, now) {
-            let detail = format!("brute force: {count} new connections to auth ports [{}] in {win_s}s", join_ports(&entry.1));
+            let detail = format!(
+                "brute force: {count} new connections to auth ports [{}] in {win_s}s",
+                join_ports(&entry.1)
+            );
             out.push(draft(ev, RuleId::BruteForce, sev, detail, count, win_s));
             entry.0.clear();
             entry.1.clear();
@@ -305,7 +331,9 @@ impl Detector for SynFloodDetector {
         {
             if let (Some(lip), Some(lport)) = (ev.src_ip, ev.src_port) {
                 let key = (lip, lport);
-                let entry = self.state.get_or_insert_with(key, || (VecDeque::new(), VecDeque::new()));
+                let entry = self
+                    .state
+                    .get_or_insert_with(key, || (VecDeque::new(), VecDeque::new()));
                 bump_window(&mut entry.1, now, win);
             }
             return;
@@ -317,12 +345,18 @@ impl Detector for SynFloodDetector {
         let Some(dport) = ev.dst_port else { return };
         let key = (ev.dst_ip, dport);
         let (thr, sev, win_s, max_ratio) = (self.threshold, self.sev, self.win_s, self.max_ratio);
-        let entry = self.state.get_or_insert_with(key, || (VecDeque::new(), VecDeque::new()));
+        let entry = self
+            .state
+            .get_or_insert_with(key, || (VecDeque::new(), VecDeque::new()));
         let syns = bump_window(&mut entry.0, now, win);
         prune_only(&mut entry.1, now, win);
         let synacks = entry.1.len() as u64;
         if syns >= thr as u64 {
-            let ratio = if syns > 0 { synacks as f64 / syns as f64 } else { 1.0 };
+            let ratio = if syns > 0 {
+                synacks as f64 / syns as f64
+            } else {
+                1.0
+            };
             if ratio < max_ratio && self.cooldown.allow(&key, now) {
                 let detail = format!(
                     "SYN flood on {}:{dport}: {syns} SYNs, {} SYN-ACKs, completion ratio {ratio:.2} in {win_s}s",
@@ -358,7 +392,11 @@ pub struct TargetRateDetector {
 impl TargetRateDetector {
     pub fn new(kind: RuleId, cfg: &RateCfg, cap: usize) -> Self {
         TargetRateDetector {
-            kind: if kind == RuleId::UdpFlood { FloodKind::Udp } else { FloodKind::Icmp },
+            kind: if kind == RuleId::UdpFlood {
+                FloodKind::Udp
+            } else {
+                FloodKind::Icmp
+            },
             threshold: cfg.threshold,
             win: Duration::from_secs(cfg.window_s),
             win_s: cfg.window_s,
@@ -463,7 +501,11 @@ impl Detector for ReflectionDetector {
                 let solicited = self
                     .requests
                     .get(&(ev.peer_ip, sport))
-                    .map(|t| now.duration_since(*t).map(|d| d <= self.win).unwrap_or(false))
+                    .map(|t| {
+                        now.duration_since(*t)
+                            .map(|d| d <= self.win)
+                            .unwrap_or(false)
+                    })
                     .unwrap_or(false);
                 if solicited || ev.payload_len < self.min_bytes {
                     return;
@@ -479,7 +521,14 @@ impl Detector for ReflectionDetector {
                         "reflection/amplification: {count} unsolicited {sport}-source responses >= {}B in {win_s}s",
                         self.min_bytes
                     );
-                    out.push(draft(ev, RuleId::ReflectionAmplification, sev, detail, count, win_s));
+                    out.push(draft(
+                        ev,
+                        RuleId::ReflectionAmplification,
+                        sev,
+                        detail,
+                        count,
+                        win_s,
+                    ));
                 }
             }
         }
@@ -539,11 +588,20 @@ impl Detector for DnsTunnelDetector {
         }
         let peer = ev.peer_ip;
         let now = ev.ts;
-        let (ent_thr, qlen_thr, ll_thr, subthr, txtthr, win, sev, win_s) =
-            (self.entropy, self.qlen, self.llabel, self.subthr, self.txtthr, self.win, self.sev, self.win_s);
+        let (ent_thr, qlen_thr, ll_thr, subthr, txtthr, win, sev, win_s) = (
+            self.entropy,
+            self.qlen,
+            self.llabel,
+            self.subthr,
+            self.txtthr,
+            self.win,
+            self.sev,
+            self.win_s,
+        );
 
         let ent = shannon_entropy(&q.qname);
-        let is_susp = ent >= ent_thr || q.qname.len() >= qlen_thr || longest_label(&q.qname) >= ll_thr;
+        let is_susp =
+            ent >= ent_thr || q.qname.len() >= qlen_thr || longest_label(&q.qname) >= ll_thr;
         let is_txt = q.qtype == 16 || q.qtype == 10; // TXT / NULL
         let qname = q.qname.clone();
 
@@ -569,7 +627,9 @@ impl Detector for DnsTunnelDetector {
             } else if uniq >= subthr {
                 Some(format!("many unique subdomains: {uniq}"))
             } else if susp >= 5 {
-                Some(format!("{susp} high-entropy/long qnames (last entropy {ent:.1})"))
+                Some(format!(
+                    "{susp} high-entropy/long qnames (last entropy {ent:.1})"
+                ))
             } else {
                 None
             };
@@ -625,13 +685,21 @@ impl Detector for IcmpTunnelDetector {
         }
         let peer = ev.peer_ip;
         let now = ev.ts;
-        let (thr, win, sev, win_s, maxlen) = (self.threshold, self.win, self.sev, self.win_s, self.max_payload);
+        let (thr, win, sev, win_s, maxlen) = (
+            self.threshold,
+            self.win,
+            self.sev,
+            self.win_s,
+            self.max_payload,
+        );
         let count = {
             let deq = self.state.get_or_insert_with(peer, VecDeque::new);
             bump_window(deq, now, win)
         };
         if count >= thr as u64 && self.cooldown.allow(&peer, now) {
-            let detail = format!("possible ICMP tunnel: {count} oversized echo payloads >= {maxlen}B in {win_s}s");
+            let detail = format!(
+                "possible ICMP tunnel: {count} oversized echo payloads >= {maxlen}B in {win_s}s"
+            );
             out.push(draft(ev, RuleId::IcmpTunnel, sev, detail, count, win_s));
         }
     }
@@ -678,7 +746,10 @@ fn cv_of(deq: &VecDeque<SystemTime>) -> Option<(f64, f64)> {
     let mut prev: Option<SystemTime> = None;
     for &t in deq {
         if let Some(p) = prev {
-            let d = t.checked_duration_since(p).map(|d| d.as_secs_f64()).unwrap_or(0.0);
+            let d = t
+                .checked_duration_since(p)
+                .map(|d| d.as_secs_f64())
+                .unwrap_or(0.0);
             intervals.push(d);
         }
         prev = Some(t);
@@ -703,8 +774,14 @@ impl Detector for BeaconingDetector {
         }
         let peer = ev.peer_ip;
         let now = ev.ts;
-        let (min_samples, max_cv, win, sev, win_s, max_samples) =
-            (self.min_samples, self.max_cv, self.win, self.sev, self.win_s, self.max_samples);
+        let (min_samples, max_cv, win, sev, win_s, max_samples) = (
+            self.min_samples,
+            self.max_cv,
+            self.win,
+            self.sev,
+            self.win_s,
+            self.max_samples,
+        );
 
         let result = {
             let deq = self.state.get_or_insert_with(peer, VecDeque::new);
@@ -714,7 +791,13 @@ impl Detector for BeaconingDetector {
             }
             prune_only(deq, now, win);
             if deq.len() >= min_samples {
-                cv_of(deq).and_then(|(cv, mean)| if cv <= max_cv { Some((cv, mean, deq.len())) } else { None })
+                cv_of(deq).and_then(|(cv, mean)| {
+                    if cv <= max_cv {
+                        Some((cv, mean, deq.len()))
+                    } else {
+                        None
+                    }
+                })
             } else {
                 None
             }
@@ -867,8 +950,16 @@ impl Detector for NewListenerDetector {
             m.len()
         };
         if count >= min && self.cooldown.allow(&dport, now) {
-            let detail = format!("{count} distinct sources probing un-listened port {dport} in {win_s}s");
-            out.push(draft(ev, RuleId::NewListenerProbe, sev, detail, count as u64, win_s));
+            let detail =
+                format!("{count} distinct sources probing un-listened port {dport} in {win_s}s");
+            out.push(draft(
+                ev,
+                RuleId::NewListenerProbe,
+                sev,
+                detail,
+                count as u64,
+                win_s,
+            ));
             if let Some(m) = self.state.get_mut(&dport) {
                 m.clear();
             }
@@ -938,7 +1029,11 @@ impl CustomSignatureDetector {
                 proto: s.protocol.as_deref().and_then(parse_proto),
                 dir: s.direction.as_deref().and_then(parse_dir),
                 ports: s.ports.clone(),
-                nets: s.peer_cidr.iter().filter_map(|c| c.parse::<IpNet>().ok()).collect(),
+                nets: s
+                    .peer_cidr
+                    .iter()
+                    .filter_map(|c| c.parse::<IpNet>().ok())
+                    .collect(),
                 severity: s.severity.unwrap_or(cfg.severity),
                 content: s.content.as_deref().map(crate::snort::decode_content),
                 nocase: s.nocase,
@@ -1006,7 +1101,10 @@ impl Detector for CustomSignatureDetector {
             }
             if self.cooldown.allow(&key, ev.ts) {
                 self.emitted.insert(key, already + 1);
-                let detail = format!("signature '{}' [{}] matched {} {} from {}", s.name, s.label, ev.proto, ev.direction, ev.peer_ip);
+                let detail = format!(
+                    "signature '{}' [{}] matched {} {} from {}",
+                    s.name, s.label, ev.proto, ev.direction, ev.peer_ip
+                );
                 out.push(draft(ev, RuleId::CustomSignature, s.severity, detail, 1, 0));
             }
         }
@@ -1026,7 +1124,10 @@ pub fn build_detectors(cfg: &RulesConfig, intel: IntelArc) -> Vec<Box<dyn Detect
         v.push(Box::new(PortScanDetector::new(&cfg.port_scan, cap)));
     }
     if cfg.invalid_tcp_flags.enabled {
-        v.push(Box::new(InvalidFlagsDetector::new(&cfg.invalid_tcp_flags, cap)));
+        v.push(Box::new(InvalidFlagsDetector::new(
+            &cfg.invalid_tcp_flags,
+            cap,
+        )));
     }
     if cfg.brute_force.enabled {
         v.push(Box::new(BruteForceDetector::new(&cfg.brute_force, cap)));
@@ -1035,10 +1136,18 @@ pub fn build_detectors(cfg: &RulesConfig, intel: IntelArc) -> Vec<Box<dyn Detect
         v.push(Box::new(SynFloodDetector::new(&cfg.syn_flood, cap)));
     }
     if cfg.udp_flood.enabled {
-        v.push(Box::new(TargetRateDetector::new(RuleId::UdpFlood, &cfg.udp_flood, cap)));
+        v.push(Box::new(TargetRateDetector::new(
+            RuleId::UdpFlood,
+            &cfg.udp_flood,
+            cap,
+        )));
     }
     if cfg.icmp_flood.enabled {
-        v.push(Box::new(TargetRateDetector::new(RuleId::IcmpFlood, &cfg.icmp_flood, cap)));
+        v.push(Box::new(TargetRateDetector::new(
+            RuleId::IcmpFlood,
+            &cfg.icmp_flood,
+            cap,
+        )));
     }
     if cfg.reflection.enabled {
         v.push(Box::new(ReflectionDetector::new(&cfg.reflection, cap)));
@@ -1053,10 +1162,17 @@ pub fn build_detectors(cfg: &RulesConfig, intel: IntelArc) -> Vec<Box<dyn Detect
         v.push(Box::new(BeaconingDetector::new(&cfg.beaconing, cap)));
     }
     if cfg.threat_intel.enabled {
-        v.push(Box::new(ThreatIntelDetector::new(&cfg.threat_intel, cap, intel)));
+        v.push(Box::new(ThreatIntelDetector::new(
+            &cfg.threat_intel,
+            cap,
+            intel,
+        )));
     }
     if cfg.suspicious_port.enabled {
-        v.push(Box::new(SuspiciousPortDetector::new(&cfg.suspicious_port, cap)));
+        v.push(Box::new(SuspiciousPortDetector::new(
+            &cfg.suspicious_port,
+            cap,
+        )));
     }
     if cfg.new_listener.enabled {
         v.push(Box::new(NewListenerDetector::new(&cfg.new_listener, cap)));
@@ -1099,7 +1215,13 @@ mod tests {
 
     #[test]
     fn port_scan_fires_after_threshold() {
-        let cfg = PortScanCfg { min_targets: 5, window_s: 60, cooldown_s: 300, severity: Severity::Medium, enabled: true };
+        let cfg = PortScanCfg {
+            min_targets: 5,
+            window_s: 60,
+            cooldown_s: 300,
+            severity: Severity::Medium,
+            enabled: true,
+        };
         let mut d = PortScanDetector::new(&cfg, 1000);
         let peer: IpAddr = "203.0.113.9".parse().unwrap();
         let local: IpAddr = "198.51.100.5".parse().unwrap();
@@ -1108,13 +1230,24 @@ mod tests {
         for p in 0..5u16 {
             d.on_event(&ev_syn(peer, local, 100 + p, base), &mut out);
         }
-        assert_eq!(out.len(), 1, "expected exactly one scan alert, got {}", out.len());
+        assert_eq!(
+            out.len(),
+            1,
+            "expected exactly one scan alert, got {}",
+            out.len()
+        );
         assert_eq!(out[0].rule, RuleId::PortScan);
     }
 
     #[test]
     fn port_scan_below_threshold_silent() {
-        let cfg = PortScanCfg { min_targets: 5, window_s: 60, cooldown_s: 300, severity: Severity::Medium, enabled: true };
+        let cfg = PortScanCfg {
+            min_targets: 5,
+            window_s: 60,
+            cooldown_s: 300,
+            severity: Severity::Medium,
+            enabled: true,
+        };
         let mut d = PortScanDetector::new(&cfg, 1000);
         let peer: IpAddr = "203.0.113.9".parse().unwrap();
         let local: IpAddr = "198.51.100.5".parse().unwrap();
@@ -1162,7 +1295,13 @@ mod tests {
 
     #[test]
     fn invalid_flags_fire_in_burst() {
-        let cfg = CountCfg { enabled: true, threshold: 3, window_s: 60, cooldown_s: 300, severity: Severity::Medium };
+        let cfg = CountCfg {
+            enabled: true,
+            threshold: 3,
+            window_s: 60,
+            cooldown_s: 300,
+            severity: Severity::Medium,
+        };
         let mut d = InvalidFlagsDetector::new(&cfg, 1000);
         let peer: IpAddr = "203.0.113.5".parse().unwrap();
         let local: IpAddr = "198.51.100.5".parse().unwrap();
@@ -1199,7 +1338,12 @@ mod tests {
 
     #[test]
     fn suspicious_port_fires_once_per_cooldown() {
-        let cfg = PortListCfg { enabled: true, ports: vec![4444], cooldown_s: 3600, severity: Severity::Low };
+        let cfg = PortListCfg {
+            enabled: true,
+            ports: vec![4444],
+            cooldown_s: 3600,
+            severity: Severity::Low,
+        };
         let mut d = SuspiciousPortDetector::new(&cfg, 1000);
         let peer: IpAddr = "203.0.113.20".parse().unwrap();
         let local: IpAddr = "198.51.100.5".parse().unwrap();
@@ -1229,7 +1373,12 @@ mod tests {
         let peer: IpAddr = "203.0.113.30".parse().unwrap();
         let local: IpAddr = "198.51.100.5".parse().unwrap();
         let mut out = Vec::new();
-        for n in ["a.example.org", "b.example.org", "c.example.org", "d.example.org"] {
+        for n in [
+            "a.example.org",
+            "b.example.org",
+            "c.example.org",
+            "d.example.org",
+        ] {
             let mut ev = base_ev(peer, local);
             ev.proto = Proto::Udp;
             ev.tcp_flags = None;
@@ -1241,12 +1390,20 @@ mod tests {
             });
             d.on_event(&ev, &mut out);
         }
-        assert!(out.iter().any(|a| a.rule == RuleId::DnsTunnel), "expected a dns-tunnel alert, got {out:?}");
+        assert!(
+            out.iter().any(|a| a.rule == RuleId::DnsTunnel),
+            "expected a dns-tunnel alert, got {out:?}"
+        );
     }
 
     #[test]
     fn custom_signature_matches_declared_constraints() {
-        let cfg = SimpleCfg { enabled: true, cooldown_s: 3600, severity: Severity::Medium, suppress_after: None };
+        let cfg = SimpleCfg {
+            enabled: true,
+            cooldown_s: 3600,
+            severity: Severity::Medium,
+            suppress_after: None,
+        };
         let sigs = vec![SignatureCfg {
             name: "test-4444".to_string(),
             enabled: true,

@@ -11,9 +11,15 @@ fn bench_decode(c: &mut Criterion) {
     let icmp = gen::icmp_echo(gen::attacker(5), gen::HOST, 8, 60);
 
     let mut g = c.benchmark_group("decode");
-    g.bench_function("tcp_syn", |b| b.iter(|| decode_frame(black_box(&syn)).is_ok()));
-    g.bench_function("udp_dns", |b| b.iter(|| decode_frame(black_box(&data)).is_ok()));
-    g.bench_function("icmp", |b| b.iter(|| decode_frame(black_box(&icmp)).is_ok()));
+    g.bench_function("tcp_syn", |b| {
+        b.iter(|| decode_frame(black_box(&syn)).is_ok())
+    });
+    g.bench_function("udp_dns", |b| {
+        b.iter(|| decode_frame(black_box(&data)).is_ok())
+    });
+    g.bench_function("icmp", |b| {
+        b.iter(|| decode_frame(black_box(&icmp)).is_ok())
+    });
 
     // Whole synthetic scenario build cost (not the decoder, but the harness).
     g.bench_function("scenario_build", |b| {

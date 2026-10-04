@@ -60,8 +60,13 @@ pub fn spawn(
 }
 
 fn open_socket(iface: &str) -> Result<c_int, CaptureError> {
-    let name = if iface.is_empty() { default_iface()? } else { iface.to_string() };
-    let cstr = CString::new(name.clone()).map_err(|_| CaptureError::NoSuchInterface(name.clone()))?;
+    let name = if iface.is_empty() {
+        default_iface()?
+    } else {
+        iface.to_string()
+    };
+    let cstr =
+        CString::new(name.clone()).map_err(|_| CaptureError::NoSuchInterface(name.clone()))?;
 
     // SAFETY: socket() with constant, valid domain/type/protocol arguments; a
     // negative return is checked before the fd is used.
@@ -130,7 +135,14 @@ fn open_socket(iface: &str) -> Result<c_int, CaptureError> {
     Ok(fd)
 }
 
-fn run(fd: c_int, host: &HostHandle, tx: &EventTx, counters: &Counters, stop: &AtomicBool, policy: QueuePolicy) {
+fn run(
+    fd: c_int,
+    host: &HostHandle,
+    tx: &EventTx,
+    counters: &Counters,
+    stop: &AtomicBool,
+    policy: QueuePolicy,
+) {
     let mut buf = vec![0u8; 65535];
     loop {
         if stop.load(Ordering::Relaxed) {
@@ -138,7 +150,14 @@ fn run(fd: c_int, host: &HostHandle, tx: &EventTx, counters: &Counters, stop: &A
         }
         // SAFETY: `buf` is a writable region of `buf.len()` bytes and `fd` is our
         // bound socket; the return is validated before `buf` is read.
-        let n = unsafe { libc::recv(fd, buf.as_mut_ptr().cast::<std::os::raw::c_void>(), buf.len(), 0) };
+        let n = unsafe {
+            libc::recv(
+                fd,
+                buf.as_mut_ptr().cast::<std::os::raw::c_void>(),
+                buf.len(),
+                0,
+            )
+        };
         if n < 0 {
             let e = std::io::Error::last_os_error();
             match e.raw_os_error() {
@@ -182,7 +201,8 @@ fn run(fd: c_int, host: &HostHandle, tx: &EventTx, counters: &Counters, stop: &A
 
 /// First interface with a default route (`00000000`) from `/proc/net/route`.
 fn default_iface() -> Result<String, CaptureError> {
-    let data = std::fs::read_to_string("/proc/net/route").map_err(|_| CaptureError::NoDefaultInterface)?;
+    let data =
+        std::fs::read_to_string("/proc/net/route").map_err(|_| CaptureError::NoDefaultInterface)?;
     for line in data.lines().skip(1) {
         let f: Vec<&str> = line.split_whitespace().collect();
         if f.len() >= 2 && f[1] == "00000000" {

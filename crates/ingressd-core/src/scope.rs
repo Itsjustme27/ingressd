@@ -53,7 +53,10 @@ fn is_public_v4(ip: Ipv4Addr) -> bool {
         return false;
     }
     // 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24 documentation.
-    if (a == 192 && b == 0 && _c == 2) || (a == 198 && b == 51 && _c == 100) || (a == 203 && b == 0 && _c == 113) {
+    if (a == 192 && b == 0 && _c == 2)
+        || (a == 198 && b == 51 && _c == 100)
+        || (a == 203 && b == 0 && _c == 113)
+    {
         return false;
     }
     // 192.88.99.0/24 6to4 anycast relay (reserved).
@@ -227,7 +230,15 @@ mod tests {
     fn v6_scoping() {
         let pub6: IpAddr = "2606:4700:4700::1111".parse().unwrap();
         assert!(is_public_global(pub6));
-        for s in ["::1", "::", "fe80::1", "fd12::1", "ff02::1", "2001:db8::1", "100::1"] {
+        for s in [
+            "::1",
+            "::",
+            "fe80::1",
+            "fd12::1",
+            "ff02::1",
+            "2001:db8::1",
+            "100::1",
+        ] {
             let ip: IpAddr = s.parse().unwrap();
             assert!(!is_public_global(ip), "{s} should be non-public");
         }
@@ -242,9 +253,15 @@ mod tests {
     fn direction() {
         let mut h = HostAddrs::new();
         h.set(["203.0.113.7".parse::<IpAddr>().unwrap()].into_iter());
-        let inbound = h.classify("198.51.100.9".parse().unwrap(), "203.0.113.7".parse().unwrap());
+        let inbound = h.classify(
+            "198.51.100.9".parse().unwrap(),
+            "203.0.113.7".parse().unwrap(),
+        );
         assert_eq!(inbound.unwrap().0, Direction::Inbound);
-        let transit = h.classify("198.51.100.9".parse().unwrap(), "192.0.2.5".parse().unwrap());
+        let transit = h.classify(
+            "198.51.100.9".parse().unwrap(),
+            "192.0.2.5".parse().unwrap(),
+        );
         assert!(transit.is_none());
     }
 }

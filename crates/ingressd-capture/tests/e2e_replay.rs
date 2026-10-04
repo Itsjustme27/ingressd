@@ -12,7 +12,7 @@ use std::sync::{Arc, RwLock};
 use ingressd_capture::{frame_to_event, HostHandle};
 use ingressd_core::config::RulesConfig;
 use ingressd_core::gen;
-use ingressd_core::intel::{IntelHit, IntelArc, ThreatIntelSource};
+use ingressd_core::intel::{IntelArc, IntelHit, ThreatIntelSource};
 use ingressd_core::metrics::Counters;
 use ingressd_core::pcap::{read_all, PcapWriter};
 use ingressd_core::scope::HostAddrs;
@@ -25,7 +25,9 @@ struct FixedIntel {
 }
 impl ThreatIntelSource for FixedIntel {
     fn lookup(&self, ip: IpAddr) -> Option<IntelHit> {
-        self.bad.get(&ip).map(|_| IntelHit { source: Some("test".to_string()) })
+        self.bad.get(&ip).map(|_| IntelHit {
+            source: Some("test".to_string()),
+        })
     }
     fn len(&self) -> usize {
         self.bad.len()
@@ -73,14 +75,22 @@ fn e2e_replay_detects_all_rules_and_no_benign_fp() {
     // Write a real pcap, then read it back (round-trips the writer + reader too).
     let path = std::env::temp_dir().join(format!("ingressd-e2e-{}.pcap", std::process::id()));
     {
-        let mut w = PcapWriter::new(std::fs::File::create(&path).expect("create pcap")).expect("pcap writer");
+        let mut w = PcapWriter::new(std::fs::File::create(&path).expect("create pcap"))
+            .expect("pcap writer");
         for (ts, f) in &frames {
             w.write_packet(*ts, f).expect("write packet");
         }
     }
-    let read = read_all(std::io::BufReader::new(std::fs::File::open(&path).expect("open pcap"))).expect("read pcap");
+    let read = read_all(std::io::BufReader::new(
+        std::fs::File::open(&path).expect("open pcap"),
+    ))
+    .expect("read pcap");
     let _ = std::fs::remove_file(&path);
-    assert_eq!(read.len(), frames.len(), "pcap round-trip must preserve packet count");
+    assert_eq!(
+        read.len(),
+        frames.len(),
+        "pcap round-trip must preserve packet count"
+    );
 
     // Host + engine wiring.
     let mut ha = HostAddrs::new();
@@ -126,7 +136,10 @@ fn e2e_replay_detects_all_rules_and_no_benign_fp() {
         RuleId::NewListenerProbe,
     ];
     for r in expected {
-        assert!(fired.contains_key(&r), "rule {r} did not fire; fired = {fired:?}");
+        assert!(
+            fired.contains_key(&r),
+            "rule {r} did not fire; fired = {fired:?}"
+        );
     }
     assert_eq!(benign_alerts, 0, "benign peer produced false positives");
     assert!(counters.packets() >= frames.len() as u64);

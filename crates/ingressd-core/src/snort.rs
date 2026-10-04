@@ -29,7 +29,8 @@ fn host_net(ip: IpAddr) -> IpNet {
     } else {
         format!("{ip}/128")
     };
-    cidr.parse::<IpNet>().unwrap_or(IpNet::V4("0.0.0.0/32".parse().unwrap()))
+    cidr.parse::<IpNet>()
+        .unwrap_or(IpNet::V4("0.0.0.0/32".parse().unwrap()))
 }
 
 /// Named network groups from `snort.conf` (`$HOME_NET`, `$EXTERNAL_NET`, …).
@@ -260,7 +261,12 @@ fn parse_content(segment: &str) -> Option<SnortContent> {
     let qend = after_q.find('"')?;
     let raw = after_q[..qend].to_string();
     let modifiers = &after_q[qend + 1..];
-    let mut c = SnortContent { raw, depth: None, offset: None, nocase: false };
+    let mut c = SnortContent {
+        raw,
+        depth: None,
+        offset: None,
+        nocase: false,
+    };
     for m in modifiers.split(',') {
         let m = m.trim();
         if m.eq_ignore_ascii_case("nocase") {
@@ -296,7 +302,9 @@ pub fn parse_line(line: &str, vars: &VarMap) -> Option<SnortRule> {
         return None;
     }
     // Locate the direction arrow.
-    let arrow = ht.iter().position(|t| *t == "->" || *t == "<>" || *t == "<-")?;
+    let arrow = ht
+        .iter()
+        .position(|t| *t == "->" || *t == "<>" || *t == "<-")?;
     // header: `action proto srchost srcport -> dsthost dstport`; arrow is the '->' index.
     if arrow < 2 || ht.len() < arrow + 3 {
         return None;
@@ -345,7 +353,12 @@ pub fn parse_line(line: &str, vars: &VarMap) -> Option<SnortRule> {
             "msg" => rule.msg = quoted_value(&s[name_end..]),
             "sid" => rule.sid = quoted_or_num(rest),
             "rev" => rule.rev = quoted_or_num(rest),
-            "flow" => rule.flow = rest.split(',').map(|x| x.trim().to_ascii_lowercase()).collect(),
+            "flow" => {
+                rule.flow = rest
+                    .split(',')
+                    .map(|x| x.trim().to_ascii_lowercase())
+                    .collect()
+            }
             "content" => {
                 if let Some(c) = parse_content(s) {
                     rule.contents.push(c);
@@ -380,7 +393,14 @@ pub fn parse_line(line: &str, vars: &VarMap) -> Option<SnortRule> {
     }
 
     if (rule.pcre || rule.flowbits) && rule.contents.is_empty() {
-        rule.unsupported = Some(if rule.flowbits { "flowbits state" } else { "pcre-only" }.to_string());
+        rule.unsupported = Some(
+            if rule.flowbits {
+                "flowbits state"
+            } else {
+                "pcre-only"
+            }
+            .to_string(),
+        );
     }
     Some(rule)
 }
@@ -487,7 +507,8 @@ impl SnortRule {
     fn default_severity(&self) -> Severity {
         let ct = self.classtype.as_deref().unwrap_or("");
         match ct {
-            "trojan-activity" | "malware" | "attempted-dos" | "suspicious-login" | "successful-admin" => Severity::High,
+            "trojan-activity" | "malware" | "attempted-dos" | "suspicious-login"
+            | "successful-admin" => Severity::High,
             "attempted-admin" | "web-application-attack" | "policy-violation" => Severity::Medium,
             _ => Severity::Medium,
         }
@@ -501,7 +522,10 @@ impl SnortRule {
             if t == "url" && v.contains("attack.mitre.org/techniques/") {
                 if let Some(idx) = v.find("techniques/") {
                     let tail = &v[idx + "techniques/".len()..];
-                    let id: String = tail.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '.').collect();
+                    let id: String = tail
+                        .chars()
+                        .take_while(|c| c.is_ascii_alphanumeric() || *c == '.')
+                        .collect();
                     if !id.is_empty() {
                         out.push(id);
                     }
@@ -527,7 +551,8 @@ impl SnortRule {
     /// Convert this rule to a Sigma document for SIEM import.
     pub fn to_sigma(&self) -> String {
         let level = match self.classtype.as_deref().unwrap_or("") {
-            "trojan-activity" | "malware" | "attempted-dos" | "suspicious-login" | "successful-admin" => "high",
+            "trojan-activity" | "malware" | "attempted-dos" | "suspicious-login"
+            | "successful-admin" => "high",
             "attempted-admin" | "web-application-attack" | "policy-violation" => "medium",
             _ => "medium",
         };
@@ -554,13 +579,23 @@ impl SnortRule {
             .iter()
             .map(|m| format!("  - attack.{}", m.to_ascii_lowercase()))
             .collect();
-        tags.push(format!("  - snort.classtype.{}", self.classtype.clone().unwrap_or_else(|| "uncategorized".into())));
+        tags.push(format!(
+            "  - snort.classtype.{}",
+            self.classtype
+                .clone()
+                .unwrap_or_else(|| "uncategorized".into())
+        ));
 
         let msg_yaml = yaml_quote(&self.msg);
         let content_comment = self
             .contents
             .first()
-            .map(|c| format!("  # snort content keyword: {}\n", yaml_quote(&String::from_utf8_lossy(&decode_content(&c.raw)))))
+            .map(|c| {
+                format!(
+                    "  # snort content keyword: {}\n",
+                    yaml_quote(&String::from_utf8_lossy(&decode_content(&c.raw)))
+                )
+            })
             .unwrap_or_default();
 
         format!(
@@ -591,7 +626,10 @@ impl SnortRule {
             id = id,
             sid = self.sid,
             rev = self.rev,
-            ct = self.classtype.clone().unwrap_or_else(|| "uncategorized".into()),
+            ct = self
+                .classtype
+                .clone()
+                .unwrap_or_else(|| "uncategorized".into()),
             msg_q = msg_yaml,
             content_comment = content_comment,
             level = level,
@@ -609,12 +647,19 @@ fn yaml_quote(s: &str) -> String {
 
 /// Convert every rule in `text` to a concatenated Sigma pack.
 pub fn snort_text_to_sigma(text: &str, vars: &VarMap) -> String {
-    parse_str(text, vars).iter().map(|r| r.to_sigma()).collect::<Vec<_>>().join("")
+    parse_str(text, vars)
+        .iter()
+        .map(|r| r.to_sigma())
+        .collect::<Vec<_>>()
+        .join("")
 }
 
 /// Convert every rule in `text` into engine signatures (enforceable ones only).
 pub fn snort_text_to_signatures(text: &str, vars: &VarMap) -> Vec<SignatureCfg> {
-    parse_str(text, vars).iter().filter_map(|r| r.to_signature()).collect()
+    parse_str(text, vars)
+        .iter()
+        .filter_map(|r| r.to_signature())
+        .collect()
 }
 
 /// The rule id that Snort-translated alerts share.
@@ -644,7 +689,9 @@ mod tests {
     #[test]
     fn converts_to_signature() {
         let vars = VarMap::new();
-        let sig = parse_str(SAMPLE, &vars)[0].to_signature().expect("should convert");
+        let sig = parse_str(SAMPLE, &vars)[0]
+            .to_signature()
+            .expect("should convert");
         assert_eq!(sig.name, "snort-110");
         assert_eq!(sig.direction.as_deref(), Some("in"));
         assert_eq!(sig.ports, vec![22]);
@@ -658,7 +705,10 @@ mod tests {
         let vars = VarMap::new();
         let r = &parse_str(line, &vars)[0];
         assert_eq!(r.contents[0].depth, Some(16));
-        assert_eq!(decode_content(&r.contents[0].raw), vec![b'2', 0, 0, 0, 6, b'D', b'r', b'i', b'v', b'e', b's']);
+        assert_eq!(
+            decode_content(&r.contents[0].raw),
+            vec![b'2', 0, 0, 0, 6, b'D', b'r', b'i', b'v', b'e', b's']
+        );
         assert_eq!(r.to_signature().unwrap().direction.as_deref(), Some("out"));
     }
 
@@ -668,7 +718,9 @@ mod tests {
         let sig = parse_str(SAMPLE, &vars)[0].to_sigma();
         assert!(sig.starts_with("---\n"));
         assert!(sig.contains("title: \""));
-        assert!(sig.contains("attack.t1071") || sig.contains("attack.t1110") || sig.contains("attack."));
+        assert!(
+            sig.contains("attack.t1071") || sig.contains("attack.t1110") || sig.contains("attack.")
+        );
         assert!(sig.contains("level: high"));
     }
 

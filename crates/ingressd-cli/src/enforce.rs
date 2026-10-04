@@ -33,7 +33,11 @@ pub struct Enforcer {
 
 impl Enforcer {
     /// Build from config. `override_enable`/`override_dry_run` come from CLI flags.
-    pub fn new(cfg: &EnforceCfg, override_enable: bool, override_dry_run: Option<bool>) -> Enforcer {
+    pub fn new(
+        cfg: &EnforceCfg,
+        override_enable: bool,
+        override_dry_run: Option<bool>,
+    ) -> Enforcer {
         Enforcer {
             enabled: cfg.enabled || override_enable,
             dry_run: override_dry_run.unwrap_or(cfg.dry_run),
@@ -70,13 +74,27 @@ impl Enforcer {
         // `add set ... type ipv4_addr flags timeout` — element set for timed blocks.
         let _ = Command::new("nft")
             .args([
-                "add", "set", self.family.as_str(), self.table.as_str(), self.set.as_str(), "type", "ipv4_addr", "flags", "timeout",
+                "add",
+                "set",
+                self.family.as_str(),
+                self.table.as_str(),
+                self.set.as_str(),
+                "type",
+                "ipv4_addr",
+                "flags",
+                "timeout",
             ])
             .status();
     }
 
     /// Block `peer` for a policy timeout, with all the never-block guards applied.
-    pub fn block(&self, peer: IpAddr, alert_id: &str, host: &std::sync::RwLock<HostAddrs>, never: &HashSet<IpAddr>) {
+    pub fn block(
+        &self,
+        peer: IpAddr,
+        alert_id: &str,
+        host: &std::sync::RwLock<HostAddrs>,
+        never: &HashSet<IpAddr>,
+    ) {
         if !self.enabled || self.severity_lt_guard(peer) {
             return;
         }
@@ -104,7 +122,10 @@ impl Enforcer {
                 return;
             }
             if b.len() >= self.max_entries {
-                tracing::warn!("block set at capacity ({}); not blocking {peer}", self.max_entries);
+                tracing::warn!(
+                    "block set at capacity ({}); not blocking {peer}",
+                    self.max_entries
+                );
                 return;
             }
             b.insert(peer);
@@ -115,7 +136,10 @@ impl Enforcer {
             return;
         }
         if !self.supported {
-            tracing::warn!("enforcement unsupported on {}; would block {peer}", std::env::consts::OS);
+            tracing::warn!(
+                "enforcement unsupported on {}; would block {peer}",
+                std::env::consts::OS
+            );
             return;
         }
 
@@ -131,9 +155,22 @@ impl Enforcer {
 
         let ipstr = peer.to_string();
         let timeout = format!("{}s", self.timeout_secs);
-        let args = ["add", "element", self.family.as_str(), self.table.as_str(), self.set.as_str(), "{", ipstr.as_str(), "timeout", timeout.as_str(), "}"];
+        let args = [
+            "add",
+            "element",
+            self.family.as_str(),
+            self.table.as_str(),
+            self.set.as_str(),
+            "{",
+            ipstr.as_str(),
+            "timeout",
+            timeout.as_str(),
+            "}",
+        ];
         match Command::new("nft").args(args).status() {
-            Ok(st) if st.success() => tracing::info!("nft blocked {peer} for {timeout} (alert {alert_id})"),
+            Ok(st) if st.success() => {
+                tracing::info!("nft blocked {peer} for {timeout} (alert {alert_id})")
+            }
             Ok(st) => tracing::error!("nft add for {peer} failed: {st}"),
             Err(e) => tracing::error!("nft spawn failed: {e}"),
         }
@@ -149,8 +186,20 @@ impl Enforcer {
             return Err("nftables enforcement is only supported on Linux".into());
         }
         let ipstr = peer.to_string();
-        let args = ["delete", "element", self.family.as_str(), self.table.as_str(), self.set.as_str(), "{", ipstr.as_str(), "}"];
-        let st = Command::new("nft").args(args).status().map_err(|e| e.to_string())?;
+        let args = [
+            "delete",
+            "element",
+            self.family.as_str(),
+            self.table.as_str(),
+            self.set.as_str(),
+            "{",
+            ipstr.as_str(),
+            "}",
+        ];
+        let st = Command::new("nft")
+            .args(args)
+            .status()
+            .map_err(|e| e.to_string())?;
         if st.success() {
             Ok(())
         } else {

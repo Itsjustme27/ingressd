@@ -126,7 +126,10 @@ not-an-ip
     #[test]
     fn bare_ip_is_host_net() {
         assert_eq!(parse_token("8.8.8.8").unwrap().prefix_len(), 32);
-        assert_eq!(parse_token("8.8.8.0/24").unwrap().network().to_string(), "8.8.8.0");
+        assert_eq!(
+            parse_token("8.8.8.0/24").unwrap().network().to_string(),
+            "8.8.8.0"
+        );
     }
 
     #[test]

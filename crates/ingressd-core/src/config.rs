@@ -11,18 +11,18 @@ use crate::types::Severity;
 
 /// Default TCP ports treated as authentication services for brute-force.
 pub const DEFAULT_AUTH_PORTS: [u16; 15] = [
-    22,    // SSH
-    23,    // Telnet
-    21,    // FTP
-    3389,  // RDP
-    445,   // SMB
-    139,   // NetBIOS
-    5900,  // VNC
+    22,   // SSH
+    23,   // Telnet
+    21,   // FTP
+    3389, // RDP
+    445,  // SMB
+    139,  // NetBIOS
+    5900, // VNC
     5901, 5902, 5903, // VNC display N
-    5985,  // WinRM HTTP
-    5986,  // WinRM HTTPS
-    1433,  // MSSQL
-    3306,  // MySQL
+    5985, // WinRM HTTP
+    5986, // WinRM HTTPS
+    1433, // MSSQL
+    3306, // MySQL
 ];
 
 /// Default UDP ports known to be abused for reflection/amplification.
@@ -30,7 +30,8 @@ pub const DEFAULT_REFLECT_PORTS: [u16; 6] = [53, 123, 161, 389, 1900, 11211];
 
 /// Default ports associated with backdoors / C2.
 pub const DEFAULT_SUSPICIOUS_PORTS: [u16; 16] = [
-    1234, 1971, 31337, 4444, 5005, 5555, 6666, 6667, 6697, 7777, 8080, 8443, 9001, 10000, 12345, 12346,
+    1234, 1971, 31337, 4444, 5005, 5555, 6666, 6667, 6697, 7777, 8080, 8443, 9001, 10000, 12345,
+    12346,
 ];
 
 /// All rule configuration.
@@ -360,19 +361,36 @@ impl Default for RulesConfig {
 
 impl Default for CountCfg {
     fn default() -> Self {
-        CountCfg { enabled: true, threshold: 10, window_s: 60, cooldown_s: 300, severity: Severity::Medium }
+        CountCfg {
+            enabled: true,
+            threshold: 10,
+            window_s: 60,
+            cooldown_s: 300,
+            severity: Severity::Medium,
+        }
     }
 }
 
 impl Default for RateCfg {
     fn default() -> Self {
-        RateCfg { enabled: true, threshold: 5000, window_s: 5, cooldown_s: 300, severity: Severity::High }
+        RateCfg {
+            enabled: true,
+            threshold: 5000,
+            window_s: 5,
+            cooldown_s: 300,
+            severity: Severity::High,
+        }
     }
 }
 
 impl Default for SimpleCfg {
     fn default() -> Self {
-        SimpleCfg { enabled: true, cooldown_s: 3600, severity: Severity::High, suppress_after: None }
+        SimpleCfg {
+            enabled: true,
+            cooldown_s: 3600,
+            severity: Severity::High,
+            suppress_after: None,
+        }
     }
 }
 
@@ -389,7 +407,13 @@ impl Default for PortListCfg {
 
 impl Default for PortScanCfg {
     fn default() -> Self {
-        PortScanCfg { enabled: true, min_targets: 15, window_s: 30, cooldown_s: 300, severity: Severity::Medium }
+        PortScanCfg {
+            enabled: true,
+            min_targets: 15,
+            window_s: 30,
+            cooldown_s: 300,
+            severity: Severity::Medium,
+        }
     }
 }
 
@@ -451,7 +475,14 @@ impl Default for DnsTunnelCfg {
 
 impl Default for IcmpTunnelCfg {
     fn default() -> Self {
-        IcmpTunnelCfg { enabled: true, max_payload: 1000, threshold: 20, window_s: 60, cooldown_s: 600, severity: Severity::Medium }
+        IcmpTunnelCfg {
+            enabled: true,
+            max_payload: 1000,
+            threshold: 20,
+            window_s: 60,
+            cooldown_s: 600,
+            severity: Severity::Medium,
+        }
     }
 }
 
@@ -471,7 +502,13 @@ impl Default for BeaconingCfg {
 
 impl Default for NewListenerCfg {
     fn default() -> Self {
-        NewListenerCfg { enabled: true, min_sources: 20, window_s: 120, cooldown_s: 600, severity: Severity::Low }
+        NewListenerCfg {
+            enabled: true,
+            min_sources: 20,
+            window_s: 120,
+            cooldown_s: 600,
+            severity: Severity::Low,
+        }
     }
 }
 
@@ -513,36 +550,81 @@ impl RulesConfig {
         if self.port_scan.min_targets < 2 {
             errs.push("port-scan: min_targets must be >= 2".into());
         }
-        check_win("port-scan", self.port_scan.window_s, self.port_scan.cooldown_s, &mut errs);
-        check_win("invalid-tcp-flags", self.invalid_tcp_flags.window_s, self.invalid_tcp_flags.cooldown_s, &mut errs);
+        check_win(
+            "port-scan",
+            self.port_scan.window_s,
+            self.port_scan.cooldown_s,
+            &mut errs,
+        );
+        check_win(
+            "invalid-tcp-flags",
+            self.invalid_tcp_flags.window_s,
+            self.invalid_tcp_flags.cooldown_s,
+            &mut errs,
+        );
         if self.brute_force.threshold < 2 {
             errs.push("brute-force: threshold must be >= 2".into());
         }
-        check_win("brute-force", self.brute_force.window_s, self.brute_force.cooldown_s, &mut errs);
+        check_win(
+            "brute-force",
+            self.brute_force.window_s,
+            self.brute_force.cooldown_s,
+            &mut errs,
+        );
         if self.brute_force.ports.is_empty() {
             errs.push("brute-force: ports must not be empty".into());
         }
-        check_win("syn-flood", self.syn_flood.window_s, self.syn_flood.cooldown_s, &mut errs);
+        check_win(
+            "syn-flood",
+            self.syn_flood.window_s,
+            self.syn_flood.cooldown_s,
+            &mut errs,
+        );
         if !(0.0..=1.0).contains(&self.syn_flood.max_completion_ratio) {
             errs.push("syn-flood: max_completion_ratio must be within 0.0..=1.0".into());
         }
-        check_win("udp-flood", self.udp_flood.window_s, self.udp_flood.cooldown_s, &mut errs);
-        check_win("icmp-flood", self.icmp_flood.window_s, self.icmp_flood.cooldown_s, &mut errs);
+        check_win(
+            "udp-flood",
+            self.udp_flood.window_s,
+            self.udp_flood.cooldown_s,
+            &mut errs,
+        );
+        check_win(
+            "icmp-flood",
+            self.icmp_flood.window_s,
+            self.icmp_flood.cooldown_s,
+            &mut errs,
+        );
         if self.reflection.ports.is_empty() {
             errs.push("reflection-amplification: ports must not be empty".into());
         }
         if self.reflection.min_response_bytes == 0 {
             errs.push("reflection-amplification: min_response_bytes must be > 0".into());
         }
-        check_win("reflection-amplification", self.reflection.window_s, self.reflection.cooldown_s, &mut errs);
+        check_win(
+            "reflection-amplification",
+            self.reflection.window_s,
+            self.reflection.cooldown_s,
+            &mut errs,
+        );
         if !(0.0..=8.0).contains(&self.dns_tunnel.entropy_threshold) {
             errs.push("dns-tunnel: entropy_threshold must be within 0.0..=8.0".into());
         }
-        check_win("dns-tunnel", self.dns_tunnel.window_s, self.dns_tunnel.cooldown_s, &mut errs);
+        check_win(
+            "dns-tunnel",
+            self.dns_tunnel.window_s,
+            self.dns_tunnel.cooldown_s,
+            &mut errs,
+        );
         if self.icmp_tunnel.max_payload < 8 {
             errs.push("icmp-tunnel: max_payload must be >= 8".into());
         }
-        check_win("icmp-tunnel", self.icmp_tunnel.window_s, self.icmp_tunnel.cooldown_s, &mut errs);
+        check_win(
+            "icmp-tunnel",
+            self.icmp_tunnel.window_s,
+            self.icmp_tunnel.cooldown_s,
+            &mut errs,
+        );
         if self.beaconing.min_samples < 3 {
             errs.push("beaconing: min_samples must be >= 3".into());
         }
@@ -552,11 +634,21 @@ impl RulesConfig {
         if self.beaconing.max_samples < self.beaconing.min_samples {
             errs.push("beaconing: max_samples must be >= min_samples".into());
         }
-        check_win("beaconing", self.beaconing.window_s, self.beaconing.cooldown_s, &mut errs);
+        check_win(
+            "beaconing",
+            self.beaconing.window_s,
+            self.beaconing.cooldown_s,
+            &mut errs,
+        );
         if self.new_listener.min_sources < 2 {
             errs.push("new-listener-probe: min_sources must be >= 2".into());
         }
-        check_win("new-listener-probe", self.new_listener.window_s, self.new_listener.cooldown_s, &mut errs);
+        check_win(
+            "new-listener-probe",
+            self.new_listener.window_s,
+            self.new_listener.cooldown_s,
+            &mut errs,
+        );
         if self.suspicious_port.ports.is_empty() {
             errs.push("suspicious-port: ports must not be empty".into());
         }
@@ -569,21 +661,34 @@ impl RulesConfig {
             }
             if let Some(p) = &sig.protocol {
                 if !matches!(p.as_str(), "tcp" | "udp" | "icmp") {
-                    errs.push(format!("signature '{}': protocol must be tcp|udp|icmp", sig.name));
+                    errs.push(format!(
+                        "signature '{}': protocol must be tcp|udp|icmp",
+                        sig.name
+                    ));
                 }
             }
             if let Some(d) = &sig.direction {
                 if !matches!(d.as_str(), "in" | "out") {
-                    errs.push(format!("signature '{}': direction must be in|out", sig.name));
+                    errs.push(format!(
+                        "signature '{}': direction must be in|out",
+                        sig.name
+                    ));
                 }
             }
             // Reject a signature that would match every packet.
-            if sig.protocol.is_none() && sig.direction.is_none() && sig.ports.is_empty() && sig.peer_cidr.is_empty() {
+            if sig.protocol.is_none()
+                && sig.direction.is_none()
+                && sig.ports.is_empty()
+                && sig.peer_cidr.is_empty()
+            {
                 errs.push(format!("signature '{}': set at least one constraint (protocol/direction/ports/peer_cidr)", sig.name));
             }
             for cidr in &sig.peer_cidr {
                 if cidr.parse::<ipnet::IpNet>().is_err() {
-                    errs.push(format!("signature '{}': invalid peer_cidr '{cidr}'", sig.name));
+                    errs.push(format!(
+                        "signature '{}': invalid peer_cidr '{cidr}'",
+                        sig.name
+                    ));
                 }
             }
         }

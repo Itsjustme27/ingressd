@@ -70,7 +70,12 @@ impl QueuePolicy {
 /// Returns `None` for non-IP frames (skipped), for traffic that does not involve
 /// this host (transit on a mirror port), and for peers that are not globally
 /// routable. Counters reflect parse errors and skipped non-public peers.
-pub fn frame_to_event(bytes: &[u8], ts: SystemTime, host: &HostHandle, counters: &Counters) -> Option<PacketEvent> {
+pub fn frame_to_event(
+    bytes: &[u8],
+    ts: SystemTime,
+    host: &HostHandle,
+    counters: &Counters,
+) -> Option<PacketEvent> {
     match decode::decode_frame(bytes) {
         Ok(raw) => classify(raw, ts, host, counters),
         // ARP and other non-IP protocols are expected on a live wire: skip quietly.
@@ -83,7 +88,12 @@ pub fn frame_to_event(bytes: &[u8], ts: SystemTime, host: &HostHandle, counters:
     }
 }
 
-fn classify(raw: RawPacket, ts: SystemTime, host: &HostHandle, counters: &Counters) -> Option<PacketEvent> {
+fn classify(
+    raw: RawPacket,
+    ts: SystemTime,
+    host: &HostHandle,
+    counters: &Counters,
+) -> Option<PacketEvent> {
     // Transit that does not involve this host (mirror noise) is skipped via `?`.
     let (direction, local_ip, peer_ip) = {
         let h = host.read().unwrap_or_else(|p| p.into_inner());
@@ -95,12 +105,49 @@ fn classify(raw: RawPacket, ts: SystemTime, host: &HostHandle, counters: &Counte
         return None;
     }
 
-    let (src_port, dst_port, proto, tcp_flags, icmp, dns, payload_len, payload) = match raw.transport {
-        Transport::Tcp(t) => (Some(t.src), Some(t.dst), Proto::Tcp, Some(t.flags), None, None, t.payload_len, t.payload),
-        Transport::Udp(u) => (Some(u.src), Some(u.dst), Proto::Udp, None, None, u.dns, u.payload_len, u.payload),
-        Transport::Icmp(i) => (None, None, Proto::Icmp, None, Some(i), None, i.payload_len, Vec::new()),
-        Transport::Other => (None, None, Proto::Other(raw.ip_protocol), None, None, None, 0, Vec::new()),
-    };
+    let (src_port, dst_port, proto, tcp_flags, icmp, dns, payload_len, payload) =
+        match raw.transport {
+            Transport::Tcp(t) => (
+                Some(t.src),
+                Some(t.dst),
+                Proto::Tcp,
+                Some(t.flags),
+                None,
+                None,
+                t.payload_len,
+                t.payload,
+            ),
+            Transport::Udp(u) => (
+                Some(u.src),
+                Some(u.dst),
+                Proto::Udp,
+                None,
+                None,
+                u.dns,
+                u.payload_len,
+                u.payload,
+            ),
+            Transport::Icmp(i) => (
+                None,
+                None,
+                Proto::Icmp,
+                None,
+                Some(i),
+                None,
+                i.payload_len,
+                Vec::new(),
+            ),
+            Transport::Other => (
+                None,
+                None,
+                Proto::Other(raw.ip_protocol),
+                None,
+                None,
+                None,
+                0,
+                Vec::new(),
+            ),
+        };
 
     Some(PacketEvent {
         ts,
