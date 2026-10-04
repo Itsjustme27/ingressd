@@ -12,7 +12,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN_SRC="${BIN_SRC:-$REPO_ROOT/target/release/ingressd}"
 FEATURES="${FEATURES:-live-capture}"
-PREFIX="${PREFIX:-/usr/local}"
+PREFIX="${PREFIX:-/usr}"   # installs to /usr/bin/ingressd (matches the systemd unit + AppArmor profile)
 
 USER_NAME=ingressd
 STATE_DIR=/var/lib/ingressd
@@ -48,6 +48,17 @@ install -m 0755 "$BIN_SRC" "$PREFIX/bin/ingressd"
 # Non-root process keeps only CAP_NET_RAW (capture). Re-add NET_ADMIN only if enforcing.
 setcap 'cap_net_raw=ep' "$PREFIX/bin/ingressd"
 chown "$USER_NAME:$USER_NAME" "$STATE_DIR" "$LOG_DIR"
+
+# Optional AppArmor: install a deny-by-default profile when the tooling exists.
+# Enable confinement by uncommenting AppArmorProfile= in the systemd unit.
+if command -v apparmor_parser >/dev/null 2>&1; then
+  install -m 0644 "$REPO_ROOT/deploy/apparmor/ingressd" /etc/apparmor.d/ingressd
+  if apparmor_parser -r /etc/apparmor.d/ingressd; then
+    say "loaded AppArmor profile 'ingressd' (set AppArmorProfile=ingressd in the unit to confine)"
+  else
+    say "WARNING: apparmor_parser rejected the profile; skipping confinement"
+  fi
+fi
 
 if [ ! -f "$CONF_DIR/config.toml" ]; then
   say "installing default config to $CONF_DIR/config.toml"

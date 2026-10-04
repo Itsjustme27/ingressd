@@ -34,6 +34,10 @@ RestrictRealtime=true
 RestrictSUIDSGID=true
 LockPersonality=true
 
+# Optional AppArmor confinement (deploy/install.sh loads the profile). Uncomment
+# after the profile is loaded; run `aa-status` to confirm it is enforce/complain.
+# AppArmorProfile=ingressd
+
 # RSS budget (design target < 300 MB). Raise if you tune max_tracked_keys up.
 MemoryMax=380M
 
