@@ -21,7 +21,7 @@ services:
       # Docker's default seccomp profile already permits AF_PACKET when NET_RAW
       # is granted. Use the stricter local profile only after auditing it with
       # `strace`/seccomp-agent (a missing syscall breaks the runtime):
-      # - seccomp:./seccomp/ingressd.json
+      # - seccomp:./security/seccomp/ingressd.json
     volumes:
       - ./config.toml:/etc/ingressd/config.toml:ro
       - ingressd-state:/var/lib/ingressd

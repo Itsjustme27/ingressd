@@ -1,0 +1,30 @@
+name: "✨ Feature request"
+description: Suggest an idea or enhancement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ingressd stays **passive and defensive** — requests for offensive or
+        packet-injection capability will be declined.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem this solves
+      description: What is hard/missing today? A detection gap, a workflow, an integration?
+    validations: { required: true }
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How should it work? Config shape, rule logic, output?
+    validations: { required: true }
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [rules, snort, intel, sinks, metrics, enforce, config, cli, docs, other]

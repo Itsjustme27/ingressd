@@ -52,7 +52,7 @@ chown "$USER_NAME:$USER_NAME" "$STATE_DIR" "$LOG_DIR"
 # Optional AppArmor: install a deny-by-default profile when the tooling exists.
 # Enable confinement by uncommenting AppArmorProfile= in the systemd unit.
 if command -v apparmor_parser >/dev/null 2>&1; then
-  install -m 0644 "$REPO_ROOT/deploy/apparmor/ingressd" /etc/apparmor.d/ingressd
+  install -m 0644 "$REPO_ROOT/deploy/security/apparmor/ingressd" /etc/apparmor.d/ingressd
   if apparmor_parser -r /etc/apparmor.d/ingressd; then
     say "loaded AppArmor profile 'ingressd' (set AppArmorProfile=ingressd in the unit to confine)"
   else
@@ -69,7 +69,7 @@ else
 fi
 
 say "installing systemd unit"
-install -m 0644 "$REPO_ROOT/deploy/ingressd.service" /etc/systemd/system/ingressd.service
+install -m 0644 "$REPO_ROOT/deploy/systemd/ingressd.service" /etc/systemd/system/ingressd.service
 
 say "enabling and starting ingressd"
 systemctl daemon-reload

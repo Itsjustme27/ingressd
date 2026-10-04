@@ -1,0 +1,22 @@
+# ingressd local Snort-style rules — example
+#
+# Copy to /etc/ingressd/local.rules and reference it from config.toml:
+#   [custom_signatures]
+#   enabled = true
+#   files   = ["/etc/ingressd/local.rules"]
+#
+# Supported for in-engine enforcement: protocol, src/dst address+port
+# (single/range/list), direction (from $HOME_NET/$EXTERNAL_NET + flow), and a
+# single payload `content` with `nocase` / `depth` / `offset`. Rules that rely
+# only on `pcre` or `flowbits` are exported to Sigma but skipped in-engine.
+# `classtype` drives default severity; `reference:url,attack.mitre.org/...`
+# supplies MITRE mapping.
+
+# RDP exposed to the internet
+alert tcp $EXTERNAL_NET any -> $HOME_NET 3389 ( msg:"LOCAL RDP access from internet"; flow:to_server; classtype:policy-violation; sid:9100001; rev:1; )
+
+# Suspicious outbound beacon on a high port
+alert tcp $HOME_NET any -> $EXTERNAL_NET 8443 ( msg:"LOCAL possible C2 beacon out"; flow:to_server; content:"|7B 22 63 6D 64|"; depth 5; classtype:trojan-activity; reference:url,attack.mitre.org/techniques/T1071; sid:9100002; rev:1; )
+
+# Known-bad tool string
+alert tcp $EXTERNAL_NET any -> $HOME_NET 22 ( msg:"LOCAL netbus getinfo attempt"; flow:to_server,established; content:"GetInfo|0D|"; nocase; classtype:misc-activity; sid:9100003; rev:1; )

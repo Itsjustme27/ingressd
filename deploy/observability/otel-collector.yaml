@@ -3,7 +3,7 @@
 # + OTLP exporter layer at the `tracing_subscriber::fmt()` init point in
 # crates/ingressd-cli/src/main.rs::init_tracing, then point it at this collector.
 #
-#   docker run -p 4317:4317 -v $PWD/deploy/otel-collector.yaml:/etc/otel/config.yaml \
+#   docker run -p 4317:4317 -v $PWD/deploy/observability/otel-collector.yaml:/etc/otel/config.yaml \
 #     otel/opentelemetry-collector-contrib --config /etc/otel/config.yaml
 receivers:
   otlp:

@@ -1,0 +1,4 @@
+# Keep `cargo fmt` deterministic across contributors and CI.
+# Intentionally minimal: only pin the edition so output matches the defaults
+# already committed. Add options here to change house style deliberately.
+edition = "2021"

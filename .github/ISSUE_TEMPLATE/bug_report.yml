@@ -1,0 +1,46 @@
+name: "🐛 Bug report"
+description: Report a crash, false positive/negative, or misbehavior
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Only file bugs for infrastructure you own or are
+        authorized to monitor. Redact sensitive IPs/hosts.
+  - type: input
+    id: version
+    attributes:
+      label: ingressd version
+      placeholder: "0.1.0 (git describe --tags)"
+    validations: { required: true }
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [capture, decoders, rules, snort, intel, sinks, metrics, enforce, config, cli, other]
+    validations: { required: true }
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Expected vs actual. Include the alert JSON if relevant.
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      placeholder: |
+        Command run (e.g. `ingressd --pcap repro.pcap`), the pcap or a `pcapgen`
+        scenario, and the relevant config section.
+    validations: { required: true }
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / metrics
+      render: shell
+      placeholder: "journalctl -u ingressd | tail -n 50   and   curl -s localhost:9102/metrics"
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      placeholder: "OS/distro, kernel, cloud, interface, features built with"

@@ -168,7 +168,7 @@ files   = ["/etc/ingressd/snort3-community.rules"]
 vars    = { HOME_NET = "0.0.0.0/0", EXTERNAL_NET = "any" }
 ```
 ```bash
-ingressd snort2sigma snort3-community.rules > snort.yml   # → pySigma → SIEM
+ingressd snort2sigma rules/snort3-community.rules > snort.yml   # → pySigma → SIEM
 ```
 
 **Declarative signatures** — match protocol / direction / ports / peer-CIDR /
@@ -237,10 +237,40 @@ Full annotated reference: [`config.example.toml`](config.example.toml).
 | [`ingressd-capture`](crates/ingressd-capture) | AF_PACKET (Linux), pcap replay, VPC flow-log input, bounded channel. |
 | [`ingressd-cli`](crates/ingressd-cli) | The `ingressd` binary: config, sinks, metrics, reload, enforcement. |
 
-Development, tuning and the production-readiness checklist are documented inline
-above; the CI workflow in [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
-mirrors the exact commands (`fmt`, `clippy -D warnings`, `test`, and a
-`live-capture,geoip` build on Linux).
+## Documentation
+
+Detailed guides live in [`docs/`](docs):
+
+- [Architecture](docs/architecture.md) — data flow, threading, memory bounds, feature flags
+- [Configuration](docs/configuration.md) — every `config.toml` section and key
+- [Detection rules](docs/rules.md) — per-rule logic and tuning
+- [Snort integration](docs/snort-integration.md) — loading & enforcing `.rules`
+- [Sigma & SIEM](docs/sigma-integration.md) — Splunk / Elastic / Loki
+- [Deployment](docs/deployment.md) — systemd, Docker, Kubernetes, cloud notes
+
+Contributing guidelines are in [CONTRIBUTING.md](CONTRIBUTING.md); report
+vulnerabilities per [SECURITY.md](SECURITY.md); release history lives in
+[CHANGELOG.md](CHANGELOG.md).
+
+## Repository layout
+
+```text
+Cargo.toml            workspace root
+config.example.toml   fully commented reference config
+crates/               ingressd-core · -intel · -capture · -cli
+docs/                 architecture, configuration, rules, snort, sigma, deployment
+deploy/
+  ├ Dockerfile · docker-compose.yml · install.sh
+  ├ systemd/        hardened service unit
+  ├ k8s/            DaemonSet, ConfigMap, Service, ServiceMonitor
+  ├ security/       apparmor/ + seccomp/ profiles
+  └ observability/  OpenTelemetry collector config
+rules/              Snort .rules (community + local examples)
+sigma/              Sigma export guide
+scripts/            stress + fail-open/closed validation
+fuzz/               cargo-fuzz targets (own workspace)
+.github/            CI workflow, issue/PR templates, dependabot
+```
 
 ---
 

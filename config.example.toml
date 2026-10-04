@@ -217,7 +217,7 @@ level = "info"
 # via `ingressd snort2sigma` but skipped in-engine (reported at startup).
 [custom_signatures]
 enabled = false
-files = ["snort3-community.rules"]
+files = ["rules/snort3-community.rules"]
 rules = [
   'alert tcp $EXTERNAL_NET any -> $HOME_NET 22 ( msg:"CUSTOM ssh banner grab"; flow:to_client,established; content:"SSH-2.0-evil"; nocase; sid:9000001; rev:1; )',
 ]
@@ -226,4 +226,4 @@ rules = [
 HOME_NET = "0.0.0.0/0"
 EXTERNAL_NET = "any"
 # Convert to Sigma for your SIEM without editing config:
-#   ingressd snort2sigma snort3-community.rules > snort-sigma.yml
+#   ingressd snort2sigma rules/snort3-community.rules > snort-sigma.yml
