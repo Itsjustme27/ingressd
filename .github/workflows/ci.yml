@@ -9,7 +9,6 @@ on:
 permissions:
   contents: read
 
-# Cancel superseded runs on the same ref to save CI minutes.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -19,8 +18,32 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  fmt:
-    name: Format
+  # Keep `main` rustfmt-clean by committing the formatter's output. Runs only on
+  # push to main; the follow-up commit is already formatted, so it does not loop.
+  autofmt:
+    name: Auto-format (main)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo fmt --all
+      - name: Commit if formatting changed anything
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet; then
+            git commit -am "style: cargo fmt"
+            git push
+          else
+            echo "already formatted"
+          fi
+
+  # On PRs, formatting is a hard check (no auto-commit).
+  fmt-check:
+    name: Format check (PR)
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,44 +53,35 @@ jobs:
   clippy:
     name: Clippy (-D warnings)
     runs-on: ubuntu-latest
-    needs: fmt
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
-      # Default features: the safe, portable pipeline.
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
   test:
     name: Test (default features)
     runs-on: ubuntu-latest
-    needs: clippy
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
-      # No privileges / no libpcap / no network needed: pcap replay drives the suite.
       - run: cargo test --workspace
 
   live-build:
     name: Build + test (live-capture, geoip)
     runs-on: ubuntu-latest
-    needs: clippy
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
-      # Compile the unsafe AF_PACKET module + optional GeoIP — the code paths the
-      # default-feature jobs do not build. This is the primary gate for those.
       - run: cargo test --workspace --features live-capture,geoip
       - run: cargo build --release --features live-capture,geoip
 
   portability:
     name: Check (${{ matrix.os }})
-    # Proves the default (safe) build is cross-platform; afpacket is cfg-gated.
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    needs: fmt
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
@@ -76,7 +90,6 @@ jobs:
   bench-compile:
     name: Bench compiles
     runs-on: ubuntu-latest
-    needs: clippy
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
@@ -85,8 +98,6 @@ jobs:
   fuzz-targets:
     name: Fuzz targets build (advisory)
     runs-on: ubuntu-latest
-    needs: clippy
-    # Non-blocking: cargo-fuzz needs nightly + its own setup; don't gate the PR on it.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -98,7 +109,6 @@ jobs:
   audit:
     name: Security audit (advisory)
     runs-on: ubuntu-latest
-    # Non-blocking: transitive advisories should not turn CI red on its own.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
