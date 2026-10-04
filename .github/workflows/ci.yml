@@ -18,10 +18,11 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # Keep `main` rustfmt-clean by committing the formatter's output. Runs only on
-  # push to main; the follow-up commit is already formatted, so it does not loop.
+  # Keep `main` rustfmt-clean and pre-fix machine-applicable clippy lints by
+  # committing them. Runs only on push to main; the follow-up commit is already
+  # clean, so it does not loop. Non-auto-fixable lints still fail the clippy job.
   autofmt:
-    name: Auto-format (main)
+    name: Auto-format + clippy --fix (main)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -29,15 +30,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cargo fmt --all
-      - name: Commit if formatting changed anything
+      - name: Apply machine-applicable clippy fixes
+        run: cargo clippy --workspace --all-targets --fix --allow-dirty --allow-no-vcs --allow-staged || true
+      - run: cargo fmt --all
+      - name: Commit if anything changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if ! git diff --quiet; then
-            git commit -am "style: cargo fmt"
+            git commit -am "style: cargo fmt + clippy --fix"
             git push
           else
-            echo "already formatted"
+            echo "already clean"
           fi
 
   # On PRs, formatting is a hard check (no auto-commit).
