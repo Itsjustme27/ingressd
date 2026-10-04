@@ -1,0 +1,39 @@
+[package]
+name = "ingressd-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "ingressd: passive public-IP traffic threat detector (binary, config, sinks, metrics)"
+
+[[bin]]
+name = "ingressd"
+path = "src/main.rs"
+
+[features]
+default = []
+# Live AF_PACKET capture (Linux only).
+live-capture = ["ingressd-capture/live-capture"]
+# Offline GeoIP/ASN enrichment.
+geoip = ["ingressd-intel/geoip"]
+
+[dependencies]
+ingressd-core = { workspace = true }
+ingressd-intel = { workspace = true }
+ingressd-capture = { workspace = true }
+
+tokio = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+ipnet = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+reqwest = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }

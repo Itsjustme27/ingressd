@@ -1,0 +1,28 @@
+# Build artifacts
+/target/
+**/target/
+Cargo.lock.bak
+
+# Fuzzing
+fuzz/target/
+fuzz/corpus/
+fuzz/artifacts/
+corpus/
+artifacts/
+
+# Local runtime data
+*.pcap.local
+data/
+state/
+alerts.jsonl
+alerts.jsonl.*
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Keep the committed test fixture pcap
+!tests/fixtures/*.pcap

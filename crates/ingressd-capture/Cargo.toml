@@ -1,0 +1,26 @@
+[package]
+name = "ingressd-capture"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Packet capture inputs for ingressd: AF_PACKET (Linux), pcap replay, VPC flow logs"
+
+[features]
+default = []
+# Raw AF_PACKET live capture. Requires Linux; the only `unsafe` in the workspace.
+live-capture = []
+
+[dependencies]
+ingressd-core = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[dev-dependencies]
+ingressd-core = { workspace = true }

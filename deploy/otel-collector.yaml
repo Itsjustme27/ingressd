@@ -1,0 +1,39 @@
+# Minimal OpenTelemetry Collector for ingressd tracing (optional).
+# ingressd emits `tracing` spans/events; to ship them, add a `tracing-opentelemetry`
+# + OTLP exporter layer at the `tracing_subscriber::fmt()` init point in
+# crates/ingressd-cli/src/main.rs::init_tracing, then point it at this collector.
+#
+#   docker run -p 4317:4317 -v $PWD/deploy/otel-collector.yaml:/etc/otel/config.yaml \
+#     otel/opentelemetry-collector-contrib --config /etc/otel/config.yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 256
+
+exporters:
+  # Inspect locally...
+  debug:
+    verbosity: detailed
+  # ...and forward to your backend (OTLP-compatible APM/SIEM).
+  otlphttp/backend:
+    endpoint: https://your-apm-endpoint/v1/traces
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug, otlphttp/backend]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/backend]

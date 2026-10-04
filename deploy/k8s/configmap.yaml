@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ingressd-config
+  namespace: ingressd
+  labels:
+    app.kubernetes.io/name: ingressd
+data:
+  # Trimmed example — copy config.example.toml and edit for production.
+  config.toml: |
+    [general]
+    iface = ""
+    sensor_id = ""                 # defaults to pod host IP/hostname
+    channel_capacity = 100000
+    on_queue_full = "drop"
+    refresh_host_secs = 30
+    allowlist = ["10.0.0.0/8"]     # cluster/pod CIDRs to avoid self-alerts
+    cache_dir = "/var/lib/ingressd"
+
+    [metrics]
+    enabled = true
+    listen = "0.0.0.0:9102"        # bind 0.0.0.0 inside a pod; gate via NetworkPolicy
+
+    [sinks]
+    stdout = true
+    alerts_file = "/var/log/ingressd/alerts.jsonl"
+    rotate_max_bytes = 10485760
+    rotate_max_files = 5
+
+    [log]
+    level = "info"
+
+    # Extend detection without recompiling:
+    [[rules.signature]]
+    name = "rdp-brute-target"
+    protocol = "tcp"
+    direction = "in"
+    ports = [3389]
+    severity = "high"

@@ -1,0 +1,35 @@
+# Run ingressd in Docker for a single host. Live capture needs host networking
+# and CAP_NET_RAW (plus CAP_NET_ADMIN only when [enforce] is enabled).
+#
+#   docker build -f deploy/Dockerfile -t ingressd:latest .
+#   docker compose -f deploy/docker-compose.yml up -d
+services:
+  ingressd:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: ingressd:latest
+    container_name: ingressd
+    # See all host traffic on the primary interface.
+    network_mode: host
+    pid: host
+    cap_add:
+      - NET_RAW
+      # - NET_ADMIN   # uncomment when active response ([enforce]) is enabled
+    security_opt:
+      - no-new-privileges:true
+      # Docker's default seccomp profile already permits AF_PACKET when NET_RAW
+      # is granted. Use the stricter local profile only after auditing it with
+      # `strace`/seccomp-agent (a missing syscall breaks the runtime):
+      # - seccomp:./seccomp/ingressd.json
+    volumes:
+      - ./config.toml:/etc/ingressd/config.toml:ro
+      - ingressd-state:/var/lib/ingressd
+      - ingressd-logs:/var/log/ingressd
+    restart: unless-stopped
+    mem_limit: 380m
+    cpus: "2.0"
+
+volumes:
+  ingressd-state:
+  ingressd-logs:

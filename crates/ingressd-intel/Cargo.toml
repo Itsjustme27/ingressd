@@ -1,0 +1,24 @@
+[package]
+name = "ingressd-intel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Threat-intel feeds, longest-prefix blocklist trie, and optional GeoIP/ASN for ingressd"
+
+[features]
+default = []
+# Offline GeoIP/ASN enrichment from a local MaxMind DB.
+geoip = ["dep:maxminddb"]
+
+[dependencies]
+ingressd-core = { workspace = true }
+ipnet = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+maxminddb = { workspace = true, optional = true }

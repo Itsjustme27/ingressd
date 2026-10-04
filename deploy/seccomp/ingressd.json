@@ -1,0 +1,30 @@
+{
+  "//": "OPTIONAL stricter seccomp profile for ingressd. Docker's default profile + CAP_NET_RAW is sufficient; only adopt this after running the workload under seccomp-agent/strace and reconciling the allow list. AF_PACKET capture needs socket+bind+setsockopt+recvfrom+getsockopt. A missing syscall here WILL crash the runtime.",
+  "defaultAction": "SCMP_ACT_ERRNO",
+  "defaultErrnoRet": 1,
+  "architectures": [
+    "SCMP_ARCH_X86_64",
+    "SCMP_ARCH_AARCH64"
+  ],
+  "syscalls": [
+    {
+      "names": [
+        "accept4", "bind", "socket", "connect", "listen", "sendto", "recvfrom",
+        "getsockopt", "setsockopt", "shutdown", "getsockname", "getpeername",
+        "read", "write", "readv", "writev", "close", "poll", "ppoll", "select",
+        "epoll_create1", "epoll_ctl", "epoll_pwait", "eventfd2", "signalfd4",
+        "mmap", "munmap", "mprotect", "brk", "madvise",
+        "rt_sigaction", "rt_sigprocmask", "rt_sigreturn", "sigaltstack",
+        "clone", "clone3", "execve", "exit", "exit_group", "futex", "set_robust_list",
+        "getrandom", "clock_gettime", "clock_nanosleep", "gettimeofday", "nanosleep",
+        "time", " getpid", "gettid", "getuid", "geteuid", "getgid", "getegid",
+        "arch_prctl", "set_tid_address", "prlimit64", "rseq",
+        "openat", "newfstatat", "fstat", "close_range", "dup", "dup3", "fcntl",
+        "ioctl", "lseek", "fsync", "ftruncate", "getdents64", "readlinkat", "unlinkat",
+        "renameat", "mkdirat", "sched_getaffinity", "sched_setaffinity", "sched_yield",
+        "pipe2", "mincore", "membarrier"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    }
+  ]
+}

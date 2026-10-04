@@ -1,0 +1,48 @@
+[Unit]
+Description=ingressd — passive public-IP traffic threat detector
+Documentation=https://github.com/kalidada18/ingressd
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ingressd
+Group=ingressd
+ExecStart=/usr/bin/ingressd --config /etc/ingressd/config.toml
+# SIGHUP reloads thresholds, allowlist, and blocklists.
+ExecReload=/bin/kill -HUP ${MAINPID}
+Restart=on-failure
+RestartSec=5s
+
+# Capabilities: CAP_NET_RAW is all that live capture needs. CAP_NET_ADMIN is only
+# in the bounding set so `--enforce` can program nftables; drop it when not enforcing.
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN
+
+# Process hardening.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_PACKET AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+# RSS budget (design target < 300 MB). Raise if you tune max_tracked_keys up.
+MemoryMax=380M
+
+# CPU affinity: pin the service to specific cores (preferred over in-process
+# sched_setaffinity; robust under systemd). Uncomment and set a CPU list:
+# AllowedCPUs=0-1
+
+# Writable paths declared explicitly because ProtectSystem=strict.
+ReadWritePaths=/var/lib/ingressd /var/log/ingressd
+
+[Install]
+WantedBy=multi-user.target

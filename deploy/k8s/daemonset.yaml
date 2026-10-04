@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ingressd
+  namespace: ingressd
+  labels:
+    app.kubernetes.io/name: ingressd
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ingressd
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ingressd
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9102"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Capture real node traffic: use the host network namespace.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      terminationGracePeriodSeconds: 30
+      tolerations:
+        - operator: Exists # run on every node, including control-plane/edge
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+        # No allowPrivilegeEscalation; NET_RAW is the only privilege granted.
+      containers:
+        - name: ingressd
+          image: ingressd:latest
+          imagePullPolicy: IfNotPresent
+          args: ["--config", "/etc/ingressd/config.toml"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+              # Add NET_ADMIN as well only if active response ([enforce]) is on.
+              add: ["NET_RAW"]
+          ports:
+            - name: metrics
+              containerPort: 9102
+              hostPort: 9102
+          livenessProbe:
+            httpGet: { path: /healthz, port: metrics }
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet: { path: /readyz, port: metrics }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests: { cpu: "250m", memory: "128Mi" }
+            limits: { cpu: "2", memory: "380Mi" }
+          volumeMounts:
+            - { name: config, mountPath: /etc/ingressd, readOnly: true }
+            - { name: state, mountPath: /var/lib/ingressd }
+            - { name: logs, mountPath: /var/log/ingressd }
+      volumes:
+        - name: config
+          configMap: { name: ingressd-config }
+        - name: state
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}

@@ -1,0 +1,54 @@
+[workspace]
+resolver = "2"
+exclude = ["fuzz"]
+members = [
+    "crates/ingressd-core",
+    "crates/ingressd-intel",
+    "crates/ingressd-capture",
+    "crates/ingressd-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+license = "MIT OR Apache-2.0"
+authors = ["ingressd contributors"]
+repository = "https://github.com/kalidada18/ingressd"
+description = "Passive public-IP traffic threat detector for Linux cloud VMs"
+
+[workspace.dependencies]
+ingressd-core = { path = "crates/ingressd-core" }
+ingressd-intel = { path = "crates/ingressd-intel" }
+ingressd-capture = { path = "crates/ingressd-capture" }
+
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time", "sync", "net", "io-util", "fs"] }
+clap = { version = "4", features = ["derive", "env"] }
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = "1"
+toml = "0.8"
+tracing = { version = "0.1", features = ["std"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+ipnet = { version = "2", features = ["serde"] }
+hashbrown = "0.15"
+thiserror = "1"
+anyhow = "1"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+
+libc = "0.2"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+maxminddb = "0.24"
+
+proptest = "1"
+criterion = "0.5"
+libfuzzer-sys = "0.4"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = 3
+strip = "symbols"
+
+[profile.bench]
+lto = "thin"
+debug = true

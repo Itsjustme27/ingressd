@@ -1,0 +1,229 @@
+# ingressd configuration — copy to /etc/ingressd/config.toml and edit.
+# Unknown keys are rejected on load. All sections/keys below are optional;
+# omitting a section uses the built-in defaults (shown here).
+
+[general]
+# Live capture interface. Empty => auto-detect the default-route interface.
+iface = ""
+# Offline inputs (mutually exclusive with each other and with live capture).
+# pcap = "/var/lib/ingressd/sample.pcap"
+# flow_log = "-"        # '-' reads VPC flow logs from stdin
+# Extra addresses owned by this host (IP or CIDR), merged with auto-detected.
+host_ips = []
+refresh_host_secs = 30
+# Allowlisted peers (IP or CIDR): never alert, never block. Add bastions,
+# cloud health-check / LB ranges, monitoring probes, CDN/upstream ranges.
+allowlist = []
+# Directory for feed caches and rotating alert state.
+cache_dir = "/var/lib/ingressd"
+# Bounded capture->engine channel capacity.
+channel_capacity = 100000
+# Sensor id stamped on every alert (defaults to $HOSTNAME when empty).
+sensor_id = ""
+# Behavior when the capture channel is full under load:
+#   drop = fail-open (shed load, count ingressd_drops_total)  [default]
+#   stall = apply backpressure to the kernel ring
+#   exit  = fail-closed (stop capture rather than silently miss packets)
+on_queue_full = "drop"
+# Pin the live capture thread to specific CPUs (Linux). Empty = no pinning.
+cpu_affinity = []
+
+[rules]
+# Hard cap on simultaneously tracked keys per rule (LRU evicted beyond this).
+max_tracked_keys = 200000
+
+[rules.port-scan]
+enabled = true
+min_targets = 15
+window_s = 30
+cooldown_s = 300
+severity = "medium"
+
+[rules.invalid-tcp-flags]
+enabled = true
+threshold = 10
+window_s = 60
+cooldown_s = 300
+severity = "medium"
+
+[rules.brute-force]
+enabled = true
+threshold = 20
+window_s = 60
+cooldown_s = 600
+severity = "high"
+# Omit `ports` to use the built-in auth-service set.
+ports = [22, 23, 21, 3389, 445, 139, 5900, 5901, 5902, 5903, 5985, 5986, 1433, 3306]
+
+[rules.syn-flood]
+enabled = true
+threshold = 2000
+window_s = 5
+cooldown_s = 300
+severity = "high"
+max_completion_ratio = 0.10
+
+[rules.udp-flood]
+enabled = true
+threshold = 5000
+window_s = 5
+cooldown_s = 300
+severity = "high"
+
+[rules.icmp-flood]
+enabled = true
+threshold = 2000
+window_s = 5
+cooldown_s = 300
+severity = "high"
+
+[rules.reflection-amplification]
+enabled = true
+ports = [53, 123, 161, 389, 1900, 11211]
+min_response_bytes = 512
+threshold = 10
+window_s = 10
+cooldown_s = 300
+severity = "high"
+
+[rules.dns-tunnel]
+enabled = true
+entropy_threshold = 4.0
+qname_len_threshold = 60
+label_len_threshold = 40
+subdomain_threshold = 50
+txt_threshold = 100
+window_s = 120
+cooldown_s = 600
+severity = "medium"
+
+[rules.icmp-tunnel]
+enabled = true
+max_payload = 1000
+threshold = 20
+window_s = 60
+cooldown_s = 600
+severity = "medium"
+
+[rules.beaconing]
+enabled = true
+min_samples = 8
+max_jitter_cv = 0.15
+window_s = 3600
+cooldown_s = 3600
+severity = "high"
+max_samples = 256
+
+[rules.threat-intel-hit]
+enabled = true
+cooldown_s = 3600
+severity = "high"
+
+[rules.suspicious-port]
+enabled = true
+ports = [1234, 1971, 31337, 4444, 5005, 5555, 6666, 6667, 6697, 7777, 8080, 8443, 9001, 10000, 12345, 12346]
+cooldown_s = 600
+severity = "low"
+
+[rules.new-listener-probe]
+enabled = true
+min_sources = 20
+window_s = 120
+cooldown_s = 600
+severity = "low"
+
+# ---- Custom detection signatures (extend the rule set without recompiling) ----
+# Enable/price the custom-signature rule; each [[rules.signature]] below is matched
+# per packet. Cooldown is per (peer, signature-name).
+[rules.custom-signature]
+enabled = true
+cooldown_s = 600
+severity = "medium"
+# Feedback suppression: after this many alerts for the same (peer, signature),
+# go quiet to suppress recurring low-severity noise. Comment out to disable.
+# suppress_after = 25
+
+# A signature alerts when a packet satisfies ALL constraints it declares; omit any
+# you do not need. Provide at least one of protocol/direction/ports/peer_cidr.
+# [[rules.signature]]
+# name = "mssql-from-internet"        # unique, shown in alert detail + Sigma tag
+# protocol = "tcp"                     # tcp | udp | icmp
+# direction = "in"                     # in | out
+# ports = [1433, 3389]                 # match if src OR dst port is listed
+# peer_cidr = ["0.0.0.0/0"]            # match if peer is inside any CIDR
+# severity = "high"                    # override; else falls back to [rules.custom-signature]
+
+[intel]
+refresh_secs = 3600
+# Optional local MaxMind DB for ASN/country enrichment (offline only).
+# geoip_db = "/usr/share/ingressd/GeoLite2-ASN.mmdb"
+# Build with `--features geoip` to use geoip_db.
+
+[[intel.feeds]]
+name = "spamhaus-drop"
+url = "https://www.spamhaus.org/drop/drop.txt"
+enabled = true
+
+[[intel.feeds]]
+name = "feodo-banktracker"
+url = "https://feodotracker.abuse.ch/downloads/ipblocklist.txt"
+enabled = true
+
+# Local file feeds are also supported:
+# [[intel.feeds]]
+# name = "internal-honeypot"
+# path = "/etc/ingressd/bad.txt"
+# enabled = true
+
+[metrics]
+enabled = true
+listen = "127.0.0.1:9102"
+
+[sinks]
+stdout = true
+alerts_file = "/var/log/ingressd/alerts.jsonl"
+rotate_max_bytes = 10485760
+rotate_max_files = 5
+# Delete rotated alert files older than N days (retention / GDPR). Comment out for
+# size/count retention only.
+retention_days = 7
+# Zero the local (internal) address in emitted alerts for PII/privacy compliance.
+redact_local_ip = false
+syslog = false
+# webhook_url = "https://hooks.example.com/ingressd"
+# webhook_token = "secret"
+webhook_ecs = false
+
+[enforce]
+enabled = false
+dry_run = true
+family = "ip"
+table = "ingressd"
+set = "blocklist"
+timeout_secs = 3600
+max_entries = 10000
+min_severity = "high"
+# Prefer cloud-native enforcement over local nft when a hook is set:
+# hook_command = "/usr/local/bin/sg-revoke {{ip}}"
+
+[log]
+level = "info"
+
+# ---------------------------------------------------------------------------
+# Snort rule integration (actively enforced + exportable to Sigma)
+# ---------------------------------------------------------------------------
+# Load community/your own .rules at startup; every enforceable rule becomes a
+# `custom-signature` alert. pcre/flowbits-only rules are still exported to Sigma
+# via `ingressd snort2sigma` but skipped in-engine (reported at startup).
+[custom_signatures]
+enabled = false
+files = ["snort3-community.rules"]
+rules = [
+  'alert tcp $EXTERNAL_NET any -> $HOME_NET 22 ( msg:"CUSTOM ssh banner grab"; flow:to_client,established; content:"SSH-2.0-evil"; nocase; sid:9000001; rev:1; )',
+]
+# Resolve Snort variables used by your rules (else they default to "any").
+[custom_signatures.vars]
+HOME_NET = "0.0.0.0/0"
+EXTERNAL_NET = "any"
+# Convert to Sigma for your SIEM without editing config:
+#   ingressd snort2sigma snort3-community.rules > snort-sigma.yml

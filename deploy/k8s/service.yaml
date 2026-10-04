@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingressd-metrics
+  namespace: ingressd
+  labels:
+    app.kubernetes.io/name: ingressd
+spec:
+  clusterIP: None # headless: Prometheus/Operator scrapes pod endpoints directly
+  selector:
+    app.kubernetes.io/name: ingressd
+  ports:
+    - name: metrics
+      port: 9102
+      targetPort: metrics
+---
+# Requires the Prometheus Operator CRDs. Remove if you use annotation-based
+# scraping (the DaemonSet already sets prometheus.io/* annotations).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ingressd
+  namespace: ingressd
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ingressd
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      relabelings:
+        - targetLabel: tier
+          replacement: security

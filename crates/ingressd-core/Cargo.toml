@@ -1,0 +1,26 @@
+[package]
+name = "ingressd-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Decoders, public-IP scoping, sliding-window state, and detection rules for ingressd"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+ipnet = { workspace = true }
+hashbrown = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+criterion = { workspace = true }
+toml = { workspace = true }
+
+[[bench]]
+name = "decode"
+harness = false
