@@ -351,7 +351,8 @@ fn do_reload(
         tracing::error!("reload: config invalid: {e}");
         return;
     }
-    new.rules.signature.extend(collect_custom_signatures(&new));
+    let extra = collect_custom_signatures(&new);
+    new.rules.signature.extend(extra);
     let geo = load_geo(new.intel.geoip_db.as_ref());
     let allow: Vec<IpNet> = new
         .general

@@ -1,392 +1,249 @@
-# ingressd
+<div align="center">
 
-**Passive public-IP traffic threat detector for Linux cloud VMs.**
+# 🛡️ ingressd
 
-`ingressd` runs on an Ubuntu/Debian VM and inspects traffic to and from
-**publicly routable** IP addresses on the instance's internet-facing interface,
-alerting on scans, brute force, floods, reflection/amplification, DNS and ICMP
-tunneling, C2 beaconing, and contact with known-bad IPs.
+**Passive, host-based intrusion detection for Linux cloud VMs.**
 
-It is **defensive and passive by default**: observe, alert, export metrics.
-Blocking (`--enforce`) is opt-in and dry-run by default. Only deploy it on
-infrastructure you own or are authorized to monitor.
+Watch traffic to and from your instance's public IP, detect scans, brute force,
+floods, tunneling, C2 beaconing and known-bad peers, and stream structured,
+MITRE-mapped alerts to your SIEM — with optional, guarded active response.
+
+[![CI](https://github.com/kalidada18/ingressd/actions/workflows/ci.yml/badge.svg)](https://github.com/kalidada18/ingressd/actions/workflows/ci.yml)
+![Rust](https://img.shields.io/badge/rust-1.75%2B-orange?logo=rust)
+![Platform](https://img.shields.io/badge/os-linux-2b6cb0?logo=linux&logoColor=white)
+![Unsafe](https://img.shields.io/badge/unsafe-capture--only-red)
+![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)
+
+*Defensive by design · passive by default · single static binary*
+
+</div>
 
 ---
 
-## Workspace layout
+## What it's for
 
-| Crate | Role |
+| You want to… | ingressd gives you… |
 |---|---|
-| `ingressd-core` | Decoders (Ethernet/VLAN/IPv4/IPv6/TCP/UDP/ICMP/DNS), public-IP scoping, bounded LRU sliding-window state, 13 detection rules, engine, config model, metrics. `#![forbid(unsafe_code)]`. |
-| `ingressd-intel` | Longest-prefix blocklist trie, HTTPS/local feed loader with last-good caching, optional GeoIP/ASN. |
-| `ingressd-capture` | AF_PACKET live capture (Linux), portable `.pcap` replay, AWS/GCP VPC flow-log input, bounded channel. Only `unsafe` module. |
-| `ingressd-cli` | The `ingressd` binary: config load/validation, sinks (stdout / rotating JSONL file / syslog / webhook), Prometheus endpoint, SIGHUP reload, SIGTERM shutdown, optional nftables enforcement. |
-
-A separate `fuzz/` crate (excluded from the workspace) holds `cargo-fuzz` targets.
-
----
-
-## Build
-
-Requires Rust stable **1.75+**.
-
-```bash
-# Portable build + full test suite. No privileges, no libpcap, no network.
-cargo build
-cargo test --workspace
-
-# Production binary with live AF_PACKET capture (Linux only):
-cargo build --release --features live-capture
-
-# With offline GeoIP/ASN enrichment:
-cargo build --release --features live-capture,geoip
-```
-
-### Why `live-capture` is off by default
-
-Live capture is the only `unsafe`, Linux-only code. Keeping it behind a feature
-means `cargo test` compiles the entire safe pipeline (decoders → scoping → rules
-→ engine) and runs the end-to-end replay test **everywhere, without root or
-libpcap**. Build the deployment binary with `--features live-capture`.
-
-### Static binary
-
-```bash
-rustup target add x86_64-unknown-linux-musl
-cargo build --release --target x86_64-unknown-linux-musl --features live-capture
-```
+| **See who's attacking a public VM** | Passive capture on the internet-facing NIC; every scan, brute-force and flood is detected and alerted in real time. |
+| **Feed a SIEM** | JSON-Lines alerts with MITRE technique **and** tactic, a 0–100 risk score, tags and sensor id — plus a generated **Sigma** rule pack. |
+| **Detect covert channels** | DNS/ICMP tunneling and periodic **C2 beaconing** via entropy, jitter and volume analysis. |
+| **Blocklist known-bad IPs** | HTTPS/local threat-intel feeds (Spamhaus, abuse.ch, ET) in a longest-prefix trie, refreshed and cached. |
+| **Use your existing rules** | Load **community Snort3 `.rules`** or write declarative **TOML signatures** — no recompile. |
+| **Respond automatically (carefully)** | Opt-in `nftables` / cloud-hook blocking, **dry-run by default**, with never-block guardrails. |
+| **Run it like a service** | Hardened `systemd` unit (non-root, `CAP_NET_RAW` only), Docker, and a Kubernetes DaemonSet. |
 
 ---
 
-## Quick test with a pcap (no privileges)
+## Architecture
 
-```bash
-# 1. Generate a sample attack+benign pcap (one burst per rule).
-cargo run --release --bin ingressd -- pcapgen /tmp/sample.pcap
-
-# 2. Replay it through the real engine; alerts are printed as JSON Lines.
-cargo run --release --bin ingressd -- --pcap /tmp/sample.pcap --check-config
-#   (drop --check-config to actually run the replay and print alerts)
+```mermaid
+flowchart LR
+  A[AF_PACKET · pcap · VPC flow logs] --> B[Zero-copy decoders<br/>Eth/VLAN/IPv4/IPv6/TCP/UDP/ICMP/DNS]
+  B --> C[Public-IP scoping<br/>+ direction]
+  C --> D[Rule engine]
+  D --- E[(LRU-capped<br/>sliding-window state)]
+  D --- F[[Threat-intel trie]]
+  D --> G[Alerts · JSONL / webhook / syslog]
+  D --> H[Prometheus /metrics]
+  G --> I[Sigma export]
+  G --> J{Opt-in enforcement<br/>nftables / cloud hook}
 ```
 
-`--pcap` uses the pcap file's own timestamps as the clock, so windows are
-reproducible.
-
----
-
-## Deploy on a cloud VM
-
-Run `deploy/install.sh` as root. It builds with `live-capture`, creates a
-dedicated non-root `ingressd` user, installs the binary with `CAP_NET_RAW` file
-capabilities, drops everything else, and installs the hardened systemd unit.
-
-```bash
-sudo apt-get install -y libcap2-bin
-sudo ./deploy/install.sh
-systemctl status ingressd
-journalctl -u ingressd -f
-curl -s http://127.0.0.1:9102/metrics
-```
-
-Config lives at `/etc/ingressd/config.toml` (see `config.example.toml`). Reload
-thresholds / allowlist / blocklists with `systemctl reload ingressd` (SIGHUP).
-
-### Which interface
-
-`ingressd` binds the interface carrying the default route (override with
-`general.iface` or `--iface eth0`). It derives inbound/outbound from the host's
-own addresses (auto-detected + `general.host_ips`, refreshed every
-`refresh_host_secs`).
-
-### Cloud-specific notes
-
-- **AWS** — the primary ENI (`eth0`) carries the public IP when using an Elastic
-  IP or auto-assigned public IPv4. Traffic to/from the instance is visible
-  directly. `169.254.169.254` (IMDS) is auto-excluded as non-public; never block
-  it. For VPC-level visibility without a NIC in promisc mode, use **VPC Traffic
-  Mirroring** to a GWLB and capture the mirror interface, or set
-  `general.flow_log` to a VPC Flow Log stream and use the flow-log input.
-  Keep your bastion/health-check ranges in `allowlist`. Review the instance
-  security group: `ingressd` adds no inbound rules.
-- **GCP** — the instance's primary NIC sees its own traffic; public IPs are
-  often NAT'd, so pair with **VPC Flow Logs** (`general.flow_log`) for full
-  external-peer visibility. Cloud health checks (`130.211.0.0/22`,
-  `35.191.0.0/16`) belong in `allowlist`.
-- **Azure** — capture the primary NIC, or use **VNet Traffic Analytics / NSG
-  Flow Logs** exported to the flow-log input. Azure platform health-probe source
-  IP (`168.63.129.16`) must be allowlisted. IMDS `169.254.169.254` is excluded
-  automatically.
-
-- **Mirror / TAP** — on self-managed hardware, capture from a SPAN/TAP interface
-  and list the monitored hosts' addresses in `general.host_ips`; direction and
-  public-scoping are derived from them. Traffic not involving any listed address
-  is skipped (transit).
+**Pipeline:** capture → decode → scope to public peers → 14 stateful rules →
+enrich (risk score, MITRE, GeoIP) → alert + metrics → optional block. The decode
+→ engine path is safe (`#![forbid(unsafe_code)]`); the only `unsafe` is the
+isolated Linux `AF_PACKET` module, behind a feature flag.
 
 ---
 
 ## Detection rules
 
-Every rule has a configurable `threshold`/`min_*`, `window_s`, `cooldown_s`, and
-`severity`, keeps bounded sliding-window state keyed by public peer IP, and tags
-a MITRE ATT&CK technique. Alerts are deduplicated per (rule, peer) by cooldown.
+Every rule has a configurable `threshold` / `window_s` / `cooldown_s` / `severity`,
+keeps bounded per-peer state, and maps to a MITRE ATT&CK technique.
 
-| Rule key | Detects | ATT&CK | Default severity |
+| Rule | Detects | ATT&CK | Default |
 |---|---|---|---|
-| `port-scan` | N distinct `(dst, port)` SYN targets from one peer; horizontal vs vertical | T1046 | medium |
+| `port-scan` | N distinct SYN targets from one peer (horizontal / vertical) | T1046 | medium |
 | `invalid-tcp-flags` | NULL, XMAS, FIN-only, SYN+FIN, SYN+RST | T1046 | medium |
-| `brute-force` | repeated new connections to SSH/RDP/SMB/FTP/Telnet/VNC/WinRM/DB ports | T1110 | high |
-| `syn-flood` | SYN rate to a local endpoint above baseline with low completion ratio | T1498.001 | high |
-| `udp-flood` | per-target UDP packet rate | T1498 | high |
-| `icmp-flood` | per-target ICMP packet rate | T1498 | high |
-| `reflection-amplification` | unsolicited large UDP replies from reflector ports (53/123/161/389/1900/11211) with no matching request | T1498.002 | high |
-| `dns-tunnel` | high-entropy / long / many-subdomain QNAMEs, abnormal TXT/NULL volume | T1071.004 | medium |
-| `icmp-tunnel` | oversized or high-rate echo payloads | T1095 | medium |
-| `beaconing` | outbound connections at near-constant intervals (low jitter) | T1071 | high |
-| `threat-intel-hit` | peer matches a loaded blocklist | T1071 | high |
-| `suspicious-port` | traffic on known backdoor/C2 ports | T1571 | low |
-| `new-listener-probe` | many sources probing a port with no listening socket | T1595 | low |
+| `brute-force` | repeated new conns to SSH/RDP/SMB/FTP/Telnet/VNC/WinRM/DB | T1110 | high |
+| `syn-flood` | SYN rate to a local endpoint, low completion ratio | T1498.001 | high |
+| `udp-flood` / `icmp-flood` | per-target packet rate | T1498 | high |
+| `reflection-amplification` | unsolicited large UDP from reflector ports (53/123/161/389/1900/11211) | T1498.002 | high |
+| `dns-tunnel` | high-entropy / long / many-subdomain QNAMEs, TXT/NULL volume | T1071.004 | medium |
+| `icmp-tunnel` | oversized / high-rate echo payloads | T1095 | medium |
+| `beaconing` | outbound conns at near-constant intervals (low jitter) | T1071 | high |
+| `threat-intel-hit` | peer in a loaded blocklist | T1071 | high |
+| `suspicious-port` | traffic on known backdoor / C2 ports | T1571 | low |
+| `new-listener-probe` | many sources probing a port with no listener | T1595 | low |
+| `custom-signature` | your Snort3 rules + declarative TOML signatures | per-rule | per-rule |
 
-Tracked keys are capped at `rules.max_tracked_keys` (LRU); overflow is counted by
-`ingressd_evictions_total`, so a spoofed-source flood cannot exhaust memory.
-
-### Tuning
-
-- **Start noisier, then tighten.** Run a week at defaults, review
-  `alerts.jsonl`, and raise `threshold`/`min_*` for anything over-firing (common:
-  `port-scan` behind a load balancer — allowlist the LB and CDN ranges;
-  `new-listener-probe` if the listener set changes often).
-- **Flood rules** (`syn/udp/icmp-flood`) are per-target rates; set them just
-  above your normal peak pps to a service.
-- **Beaconing** needs a long `window_s` and enough `min_samples`; expect false
-  positives on legitimately periodic clients (NTP, metrics) — allowlist them.
-- Cooldowns suppress alert storms; raise them where downstream is chatty.
+State is capped (`max_tracked_keys`, default 200k) with LRU eviction, so a
+spoofed-source flood cannot exhaust memory.
 
 ---
 
-## Outputs
-
-- **Alerts** are JSON Lines with `time` (RFC3339 UTC), `rule`, `severity`,
-  `direction`, `peer_ip`, `peer_asn`, `peer_country`, `local_ip`, `proto`,
-  `ports`, `detail`, `mitre`, `count`, `window_s`. Sent to stdout and/or a
-  size-rotated file, optionally syslog and a webhook (with retry/backoff and an
-  ECS field mapping).
-- **Prometheus** at `127.0.0.1:9102/metrics`: `ingressd_packets_total`,
-  `ingressd_bytes_total`, `ingressd_parse_errors_total`, `ingressd_drops_total`,
-  `ingressd_skipped_nonpublic_total`, `ingressd_alerts_total`,
-  `ingressd_alerts_by_rule{rule=...}`, `ingressd_tracked_keys`,
-  `ingressd_channel_depth`, `ingressd_evictions_total`,
-  `ingressd_intel_feed_age_seconds`.
-
----
-
-## Active response (opt-in)
-
-`[enforce] enabled = true` (keep `dry_run = true` first) blocks peers by adding
-them to an `nftables` set with a timeout, or by invoking a user-supplied
-`hook_command` (e.g. a security-group revoker) when configured. It **never**
-blocks allowlisted peers, the host's own addresses, cloud metadata, in-use DNS
-resolvers, or the current SSH peer, and caps total entries. Every action is
-logged with the triggering alert id and is reversible:
+## Quick start
 
 ```bash
-ingressd unblock 203.0.113.9
+# 1. Try it offline — no privileges, no network, no libpcap
+cargo run --release -- pcapgen sample.pcap
+cargo run --release -- --pcap sample.pcap            # alerts stream to stdout
+
+# 2. Install as a hardened service (Linux VM)
+sudo apt-get install -y libcap2-bin
+sudo ./deploy/install.sh                              # non-root user + CAP_NET_RAW
+
+# 3. Watch it work
+journalctl -u ingressd -f
+curl -s http://127.0.0.1:9102/metrics
 ```
 
-Requires `CAP_NET_ADMIN` when using local nft (kept in the unit's bounding set;
-remove it if you only use a hook).
+Production binary with live capture:
+
+```bash
+cargo build --release --features live-capture          # + geoip for ASN/country
+```
+
+<details>
+<summary><b>Run with Docker or Kubernetes</b></summary>
+
+```bash
+# Docker (host networking + CAP_NET_RAW)
+docker build -f deploy/Dockerfile -t ingressd .
+docker compose -f deploy/docker-compose.yml up -d
+
+# Kubernetes (DaemonSet, hostNetwork, seccomp, NET_RAW-only)
+kubectl apply -f deploy/k8s/
+```
+
+</details>
 
 ---
 
-## Quality
+## A sample alert
 
-- Decoders are bounds-checked and total (no panics on malformed input);
-  `cargo-fuzz` targets: `decode_frame`, `parse_dns`, `pcap_reader`.
-- `proptest` covers window/LRU invariants; per-rule unit tests; end-to-end pcap
-  replay asserts the full alert set with zero benign false positives.
-- `cargo fmt`, `cargo clippy -- -D warnings`, `cargo audit` are expected to pass.
-- `criterion` benchmark: `cargo bench -p ingressd-core`.
+Each alert is one JSON line — ready for Splunk, Elastic (ECS), Loki, or syslog.
 
-### Known limitations (deliberate, documented)
-
-- **Live capture uses a plain `AF_PACKET` `recv` loop, not `TPACKET_V3`.** It is
-  correct and privilege-light; sustained >1 Gbit/s line-rate needs the mmap ring
-  path swapped in behind the same interface. The decode→engine path is the
-  optimized part; the capture syscall loop is the current throughput limiter.
-- **Flow-log input is per-flow, not per-packet** (no TCP flags, aggregated
-  counts). Connection-oriented rules work; rate-based flood rules under-count.
-- DNS-tunnel "unique subdomains" is approximated by unique QNAMEs per peer.
-- **No `libpcap`/`pnet` dependency** — pcap read/write and AF_PACKET are
-  hand-rolled, so the offline path has zero native-library requirements.
-
----
-
-## Alert schema & risk scoring
-
-Every alert is a JSON line. The schema now carries an explicit risk score and
-correlation metadata (see `sigma/` for the SIEM view of the same taxonomy):
+<details>
+<summary><b>Show JSON</b></summary>
 
 ```json
 {
   "id": "00000012-1a2b3c4d",
   "time": "2026-10-04T12:00:00.000000000Z",
-  "rule": "brute-force", "severity": "high", "risk_score": 78,
-  "direction": "inbound", "peer_ip": "203.0.113.7", "local_ip": "5.7.9.11",
-  "peer_asn": 64512, "peer_country": "US",
-  "proto": "tcp", "ports": {"src": 51234, "dst": 22},
+  "rule": "brute-force",
+  "severity": "high",
+  "risk_score": 78,
+  "direction": "inbound",
+  "peer_ip": "203.0.113.7",
+  "peer_asn": 64512,
+  "peer_country": "US",
+  "local_ip": "5.7.9.11",
+  "proto": "tcp",
+  "ports": { "src": 51234, "dst": 22 },
   "detail": "brute force: 24 new connections to auth ports [22] in 60s",
-  "mitre": "T1110", "tactic": "TA0006", "tactic_name": "Credential Access",
+  "mitre": "T1110",
+  "tactic": "TA0006",
+  "tactic_name": "Credential Access",
   "tags": ["credential-access", "brute-force"],
-  "count": 24, "window_s": 60, "sensor": "web-01",
+  "count": 24,
+  "window_s": 60,
+  "sensor": "web-01",
   "schema_version": 1
 }
 ```
 
-**`risk_score` (0–100)** is deterministic: `base_weight(rule) + severity_bonus +
-log-scaled volume`, clamped. It is monotonic in rule impact, configured severity,
-and observed count, so you can gate enforcement or SIEM tiers on it (e.g. block
-when `risk_score >= 70`). The `[enforce] min_severity` gate is severity-based; the
-score is available to your SIEM/hook for finer policy.
+</details>
 
-**Structured logging** is `tracing`-based. Set `RUST_LOG` or `[log] level`. For
-distributed tracing, add an OpenTelemetry layer at the `tracing_subscriber` init
-point (`tracing-opentelemetry` + an OTLP exporter) and read the spans the engine
-emits; the code already emits `tracing` events with `rule`, `peer_ip`, and
-counts as structured fields. Example OTLP collector config in `deploy/`.
+---
 
-## SIEM / Sigma integration
+## Extending detection
 
-`ingressd sigma` emits the full rule pack as multi-document Sigma YAML, kept in
-lock-step with the engine so it never drifts. Convert to Splunk/Elastic/Loki with
-pySigma (see [`sigma/README.md`](sigma/README.md)). Alerts use log source
-`product: ingressd`, `service: alerts`; correlation is by `rule`, `tags`, `mitre`,
-`tactic`, and `risk_score`. The webhook sink can emit ECS-mapped JSON
-(`[sinks] webhook_ecs = true`) for direct Elastic ingestion.
-
-## Extending detection (custom signatures & feeds)
-
-Two no-recompile extension points:
-
-1. **Threat-intel feeds** (`[intel.feeds]`) — add any HTTPS or local file of
-   IPs/CIDRs (one per line; comments and inline `#` supported; bare IPs become
-   /32, /128). Spamhaus DROP/EDROP, abuse.ch, Emerging Threats, or your own
-   honeypot output. Validated on load, cached per-feed, last-good kept on fetch
-   failure. A hit fires `threat-intel-hit` (Sigma-mapped, high by default).
-2. **Declarative signatures** (`[[rules.signature]]`) — match packets by
-   protocol / direction / ports / peer CIDR and raise a `custom-signature` alert
-   with per-signature severity, cooldown per (peer, name), and MITRE + tags
-   inherited by the pipeline:
-
-```toml
-[[rules.signature]]
-name = "rdp-from-internet"
-protocol = "tcp"
-direction = "in"
-ports = [3389]
-severity = "high"
-
-[[rules.signature]]
-name = "suspicious-outbound-udp"
-direction = "out"
-protocol = "udp"
-peer_cidr = ["0.0.0.0/0"]   # every public peer
-ports = [4444, 8888]
-```
-
-Tune any built-in rule's thresholds/window/severity and port lists under
-`[rules.*]`, and add bastion/LB/monitoring peers to `[general] allowlist` so they
-never alert or get blocked. Example in `config.example.toml`.
-
-## Snort rule integration
-
-Point `ingressd` at community or your own Snort3 `.rules` files. Two things happen:
-
-- **Sigma conversion (SIEM)** — `ingressd snort2sigma snort3-community.rules > snort.yml`
-  emits one Sigma document per rule (title=`msg`, stable id from `sid`, log source
-  `product: snort`, level from `classtype`, MITRE `tags`/`references` extracted from
-  `reference:url,attack.mitre.org/...` and a `classtype` fallback).
-- **In-engine enforcement** — set `[custom_signatures]` and list `files` and/or
-  inline `rules`. Each rule is parsed (protocol, direction from `$HOME_NET` /
-  `$EXTERNAL_NET`, port lists/ranges, peer CIDR, payload `content` with `nocase` /
-  `depth` / `offset`, plus `sid`/`msg`/`classtype`) and enforced as a
-  `custom-signature` alert next to the built-in rules. `pcre`/`flowbits`-only rules
-  are exported to Sigma but skipped in-engine (reported at startup with a reason).
+**Snort3 rules** — enforce your own or the community set, and export to Sigma:
 
 ```toml
 [custom_signatures]
 enabled = true
-files = ["/etc/ingressd/snort3-community.rules"]
-rules = ['alert tcp $EXTERNAL_NET any -> $HOME_NET 22 ( msg:"ssh grab"; content:"SSH-2.0-evil"; nocase; sid:9000001; )']
-[custom_signatures.vars]
-HOME_NET = "0.0.0.0/0"
-EXTERNAL_NET = "any"
+files   = ["/etc/ingressd/snort3-community.rules"]
+vars    = { HOME_NET = "0.0.0.0/0", EXTERNAL_NET = "any" }
 ```
-
-Snort `content` matching requires the transport payload, which the decoder snapshots
-per packet (bounded to `MAX_PAYLOAD_SNAP`); content rules therefore do not fire in
-flow-log mode (no payload). Reload with `systemctl reload ingressd` (SIGHUP).
-
-## Enterprise deployment
-
-- **systemd**: `deploy/ingressd.service` + `deploy/install.sh` (non-root user,
-  `setcap cap_net_raw=ep`, hardened sandbox).
-- **Docker**: `deploy/Dockerfile` (musl static, distroless) +
-  `deploy/docker-compose.yml` (host networking, `NET_RAW`, optional seccomp).
-- **Kubernetes**: `deploy/k8s/` — `DaemonSet` (hostNetwork, `NET_RAW` only,
-  readOnly rootfs, seccomp `RuntimeDefault`, liveness/readiness probes on
-  `/healthz`/`/readyz`), `ConfigMap`, headless `Service` + `ServiceMonitor`, and
-  an optional stricter `deploy/seccomp/ingressd.json`. Deploy:
-
 ```bash
-kubectl apply -f deploy/k8s/
+ingressd snort2sigma snort3-community.rules > snort.yml   # → pySigma → SIEM
 ```
 
-## Validation & production-readiness
+**Declarative signatures** — match protocol / direction / ports / peer-CIDR /
+payload `content` (with `nocase` / `depth` / `offset`):
 
-- **Functional**: `cargo test --workspace` (per-rule unit tests, `proptest` window
-  invariants, e2e pcap replay asserting the full alert set with zero benign FPs).
-- **Load**: `cargo test -p ingressd-capture --test stress` (bounded memory,
-  evictions exercised, no benign FPs at 200x volume). For real line-rate:
-  `sudo IFACE=eth0 TARGET_MPPS=140 ./scripts/stress_test.sh` (tcpreplay, RSS
-  guard). The optimized decode→engine path plus LRU-bounded state is designed for
-  the 1 Gbit/s / 300 MB target; the plain `recv` capture loop (no TPACKET_V3 ring)
-  is the throughput ceiling and is where you would upgrade first.
-- **Fail-open/fail-closed**: `sudo ./scripts/failopen_test.sh` verifies
-  `on_queue_full = drop` (survives, counts drops) vs `exit` (stops capture).
-
-### Production-readiness scorecard
-
-Reproducible gates (adapt to CI). Scores are the state of this implementation:
-
-| # | Area | Gate | Status |
-|---|------|------|--------|
-| 1 | Capability dropping | non-root user, `setcap`/`NET_RAW` only, bounding set | ✅ systemd+install |
-| 2 | Seccomp / sandbox | unit hardening flags; optional profile; K8s RuntimeDefault | ✅ (profile optional) |
-| 3 | Memory safety | `#![forbid(unsafe_code)]` except gated capture; LRU key caps; RSS budget/`MemoryMax` | ✅ |
-| 4 | Observability | Prometheus `/metrics`, `/healthz`+`/readyz`, structured `tracing` (otel-ready) | ✅ |
-| 5 | Alert fidelity | risk score, MITRE technique+tactic, tags, sensor, schema version | ✅ |
-| 6 | SIEM | Sigma export, JSONL/rotating file, syslog, webhook (+ECS), retries | ✅ |
-| 7 | Reliability | graceful SIGTERM, SIGHUP hot-reload, feed last-good cache, run-state checkpoint | ✅ |
-| 8 | Performance | bounded channels, zero-copy total decode, feature-gated live path | ✅ (ring-buffer deferred) |
-| 9 | Extensibility | `[[rules.signature]]` + `[custom_signatures]` (Snort) + `[intel.feeds]` | ✅ |
-| 10 | Snort integration | parser + `snort2sigma` converter + content enforcement | ✅ |
-| 11 | Active response | off by default, dry-run, never-block guards, `unblock` | ✅ |
-| 12 | Validation | unit+proptest+e2e+stress+snort-replay, fail-open/closed | ✅ |
-| 13 | Deployment | systemd, Docker, Compose, K8s DaemonSet/ServiceMonitor | ✅ |
-| 14 | Compliance | JSONL audit trail, `retention_days`, `redact_local_ip`, allowlisting, per-key `suppress_after` | ✅ |
-| 15 | Performance | bounded channels, zero-copy decode, content snapshot cap, `AllowedCPUs`/`on_queue_full` | ✅ (ring-buffer deferred) |
-| 16 | Local compile verification | `cargo build/test/clippy/fmt/audit` | ⚠ NOT run here (no toolchain); verify in VM |
-
-## Development
-
-```bash
-cargo fmt --all
-cargo clippy --workspace --all-targets -- -D warnings   # live code may need --features live-capture
-cargo test --workspace
-cargo bench -p ingressd-core
-cargo +nightly fuzz run decode_frame       # in fuzz/ (its own workspace)
+```toml
+[[rules.signature]]
+name      = "rdp-from-internet"
+protocol  = "tcp"
+direction = "in"
+ports     = [3389]
+severity  = "high"
 ```
+
+**Threat-intel feeds** — any HTTPS or local file of IPs/CIDRs; validated, cached
+per-feed, last-good kept on failure:
+
+```toml
+[[intel.feeds]]
+name = "spamhaus-drop"
+url  = "https://www.spamhaus.org/drop/drop.txt"
+```
+
+Full annotated reference: [`config.example.toml`](config.example.toml).
+
+---
+
+## Outputs & observability
+
+- **Alerts** — JSON-Lines to stdout and a size-rotated file; optional syslog and
+  a webhook (retry + backoff, ECS field mapping).
+- **Metrics** — Prometheus on `127.0.0.1:9102`: packets, bytes, parse errors,
+  drops, skipped non-public peers, alerts by rule, tracked keys, channel depth,
+  LRU evictions, feed age, custom-signature count.
+- **Health** — `/healthz` (liveness) and `/readyz` (readiness) for orchestrators.
+- **SIEM** — `ingressd sigma` emits the full rule pack as Sigma YAML.
+
+---
 
 ## Security posture
 
-`ingressd` never injects packets, never scans third parties, and treats feed
-content as data only. Run it on hosts you own.
+- **Passive by default** — observe, alert, export. Blocking is opt-in and
+  **dry-run by default**.
+- **Least privilege** — non-root `ingressd` user, `CAP_NET_RAW` only
+  (`CAP_NET_ADMIN` only when enforcing), hardened `systemd` unit, optional
+  seccomp/AppArmor confinement.
+- **Never-block guardrails** — allowlisted peers, host addresses, cloud metadata,
+  in-use DNS resolvers and the current SSH peer are never blocked; every action
+  is logged and reversible via `ingressd unblock <ip>`.
+- **Memory safety** — `#![forbid(unsafe_code)]` everywhere except the isolated
+  capture module; total, bounds-checked parsers with no panics on malformed input.
+- **Privacy** — public-IP-only analysis; optional `redact_local_ip` and
+  time-based log retention.
+
+> Only deploy on infrastructure you own or are authorized to monitor. `ingressd`
+> never injects packets, scans third parties, or treats feed content as code.
+
+---
+
+## Project layout
+
+| Crate | Responsibility |
+|---|---|
+| [`ingressd-core`](crates/ingressd-core) | Decoders, public-IP scoping, LRU window state, 14 rules, engine, config, metrics, Sigma, Snort parser. |
+| [`ingressd-intel`](crates/ingressd-intel) | Longest-prefix blocklist trie, feed loading + caching, optional GeoIP/ASN. |
+| [`ingressd-capture`](crates/ingressd-capture) | AF_PACKET (Linux), pcap replay, VPC flow-log input, bounded channel. |
+| [`ingressd-cli`](crates/ingressd-cli) | The `ingressd` binary: config, sinks, metrics, reload, enforcement. |
+
+Development, tuning and the production-readiness checklist are documented inline
+above; the CI workflow in [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
+mirrors the exact commands (`fmt`, `clippy -D warnings`, `test`, and a
+`live-capture,geoip` build on Linux).
+
+---
+
+## License
+
+Licensed under either of [MIT](LICENSE) or Apache-2.0, at your option.
