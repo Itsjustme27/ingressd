@@ -329,7 +329,8 @@ impl Detector for SynFloodDetector {
             && ev.proto == Proto::Tcp
             && ev.tcp_flags.map(|f| f.syn && f.ack).unwrap_or(false)
         {
-            if let (Some(lip), Some(lport)) = (ev.src_ip, ev.src_port) {
+            if let Some(lport) =  ev.src_port {
+                let lip = ev.src_ip;
                 let key = (lip, lport);
                 let entry = self
                     .state
@@ -747,7 +748,7 @@ fn cv_of(deq: &VecDeque<SystemTime>) -> Option<(f64, f64)> {
     for &t in deq {
         if let Some(p) = prev {
             let d = t
-                .checked_duration_since(p)
+                .duration_since(p)
                 .map(|d| d.as_secs_f64())
                 .unwrap_or(0.0);
             intervals.push(d);
@@ -1083,7 +1084,7 @@ impl Detector for CustomSignatureDetector {
                     continue;
                 }
             }
-            if !s.nets.is_empty() && !s.nets.iter().any(|n| n.contains(ev.peer_ip)) {
+            if !s.nets.is_empty() && !s.nets.iter().any(|n| n.contains(&ev.peer_ip)) {
                 continue;
             }
             if let Some(needle) = &s.content {

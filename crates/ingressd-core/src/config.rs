@@ -10,7 +10,8 @@ use serde::Deserialize;
 use crate::types::Severity;
 
 /// Default TCP ports treated as authentication services for brute-force.
-pub const DEFAULT_AUTH_PORTS: [u16; 15] = [
+/// Changed array size from 15 to 14 because it was causing mismatched types.
+pub const DEFAULT_AUTH_PORTS: [u16; 14] = [
     22,   // SSH
     23,   // Telnet
     21,   // FTP

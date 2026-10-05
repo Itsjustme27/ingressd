@@ -51,7 +51,7 @@ impl Engine {
 
     /// Whether `ip` is allowlisted (never alerted on, never blocked).
     pub fn is_allowlisted(&self, ip: IpAddr) -> bool {
-        self.allowlist.iter().any(|net| net.contains(ip))
+        self.allowlist.iter().any(|net| net.contains(&ip))
     }
 
     /// Provide the current set of locally-listening TCP ports.
