@@ -198,7 +198,7 @@ async fn main() -> anyhow::Result<()> {
 
     let counters = Arc::new(Counters::new());
     counters.set_feed_age(store.age_seconds().unwrap_or(0));
-    let intel_arc: IntelArc = Arc::clone(&store);
+    let intel_arc: IntelArc = Arc::clone(&store) as Arc<_>;
     let geo = load_geo(cfg.intel.geoip_db.as_ref());
 
     let allowlist: Vec<IpNet> = cfg
@@ -348,7 +348,7 @@ fn do_reload(
         }
     };
     if let Err(e) = new.validate() {
-        tracing::error!("reload: config invalid: {e}");
+        tracing::error!("reload: config invalid: {}", e.join("; "));
         return;
     }
     let extra = collect_custom_signatures(&new);
@@ -456,11 +456,11 @@ fn resolve_sensor(cfg: &Config) -> String {
 fn current_hosts(base: &[IpAddr]) -> Vec<IpAddr> {
     let mut v = base.to_vec();
     #[cfg(all(target_os = "linux", feature = "live-capture"))]
-    v.extend(ingressd_capture::afpacket::live_host_addrs());
-    #[allow(unused_mut)]
     {
-        v
+        let host_addrs = ingressd_capture::afpacket::live_host_addrs();
+        v.extend(host_addrs.iter());
     }
+    v
 }
 
 fn refresh_hosts(host: &HostHandle, base: &[IpAddr]) {
@@ -680,6 +680,6 @@ fn unix_signals() -> anyhow::Result<(
     Ok((
         signal(SignalKind::terminate())?,
         signal(SignalKind::interrupt())?,
-        signal(SignalKind::hup())?,
+        signal(SignalKind::hangup())?,
     ))
 }

@@ -162,6 +162,15 @@ impl HostAddrs {
         }
     }
 
+    /// All known host addresses (order is unspecified).
+pub fn iter(&self) -> impl Iterator<Item = IpAddr> + '_ {
+    self.v4
+        .iter()
+        .copied()
+        .map(IpAddr::V4)
+        .chain(self.v6.iter().copied().map(IpAddr::V6))
+}
+
     /// True when `ip` is one of this host's addresses.
     pub fn contains(&self, ip: IpAddr) -> bool {
         match ip {

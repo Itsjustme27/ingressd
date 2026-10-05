@@ -88,7 +88,7 @@ pub fn bump_window(deq: &mut VecDeque<SystemTime>, now: SystemTime, window: Dura
 
 /// Whole seconds between two times, saturating at 0.
 pub fn delta_secs(a: SystemTime, b: SystemTime) -> f64 {
-    b.checked_duration_since(a)
+    b.duration_since(a)
         .map(|d| d.as_secs_f64())
         .unwrap_or(0.0)
 }

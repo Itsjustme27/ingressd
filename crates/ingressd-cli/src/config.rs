@@ -297,7 +297,7 @@ impl Config {
     /// Parse configuration from a TOML string, then validate.
     pub fn from_toml(text: &str) -> Result<Config, String> {
         let cfg: Config = toml::from_str(text).map_err(|e| format!("config parse error: {e}"))?;
-        cfg.validate()?;
+        cfg.validate().map_err(|errs| errs.join("\n"))?;
         Ok(cfg)
     }
 
