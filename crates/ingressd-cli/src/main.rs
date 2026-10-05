@@ -458,7 +458,7 @@ fn current_hosts(base: &[IpAddr]) -> Vec<IpAddr> {
     #[cfg(all(target_os = "linux", feature = "live-capture"))]
     {
         let host_addrs = ingressd_capture::afpacket::live_host_addrs();
-        v.extend(host_addrs.into_iter());
+        v.extend(host_addrs.iter());
     }
     v
 }
